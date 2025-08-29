@@ -8,6 +8,10 @@ const enterprenuerSchema = mongoose.Schema({
   industry: String,
   foundedYear: Number,
   teamSize: Number,
+  minValuation:String,
+  maxValuation:String,
+  marketOpportunity:String,
+  advantage:String,
 });
 
 const Enterprenuer = mongoose.model("Enterpreneur", enterprenuerSchema);

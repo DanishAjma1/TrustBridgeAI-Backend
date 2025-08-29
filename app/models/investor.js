@@ -8,6 +8,10 @@ const investorSchema = mongoose.Schema({
   totalInvestments: Number,
   minimumInvestment: String,
   maximumInvestment: String,
+  investmentCriteria:Array,
+  successfullExits:Number,
+  minTimline:Number,
+  maxTimline:Number,
 });
 
 const Investor = mongoose.model("Investor", investorSchema);
