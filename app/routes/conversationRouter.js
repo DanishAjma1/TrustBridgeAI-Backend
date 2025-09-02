@@ -16,36 +16,66 @@ conversationRouter.get("/get-conversations-for-user/:id", async (req, res) => {
   }
 });
 
-conversationRouter.post("/add-conversations-for-user", async (req, res) => {
+conversationRouter.post("/update-conversations-for-user", async (req, res) => {
   try {
     await connectDB();
-    const con = req.body;
+    const { senderId, receiverId, lastMessage } = req.body;
 
-    const filter = { senderId: con.senderId };
-    let conversation = await Conversation.findOne(filter);
+    const filterForSender = { senderId: senderId };
+    const filterForReceiver = { senderId: receiverId };
 
-    if (!conversation) {
-      // Create a new conversation
-      conversation = new Conversation({
-        senderId: con.senderId,
-        participants: [con.receiverId],
-        lastMessage: con.lastMessage,
+    let conversationForSender = await Conversation.findOne(filterForSender);
+    let conversationForReceiver = await Conversation.findOne(filterForReceiver);
+
+    if (!conversationForSender) {
+      // Create a new conversationForSender
+      conversationForSender = new Conversation({
+        senderId: senderId,
+        participants: [{ receiverId, lastMessage: { ...lastMessage } }],
       });
     } else {
       // Update existing conversation
-      const isAlreadyExist = conversation.participants.find(
-        (id) => id === con.receiverId
+      const senderIndex = conversationForSender.participants.findIndex(
+        (partner) => partner.receiverId === receiverId
       );
-      if (!isAlreadyExist) {
-        conversation.participants.push(con.receiverId);
-        conversation.lastMessage = con.lastMessage;
+      if (senderIndex === -1) {
+        conversationForSender.participants.push({
+          senderId: receiverId,
+          lastMessage: { ...lastMessage },
+        });
       } else {
-        conversation.lastMessage = con.lastMessage;
+        conversationForSender.participants[senderIndex].lastMessage = {
+          ...lastMessage,
+        };
       }
     }
 
-    await conversation.save();
-    res.status(200).json({conversation});
+    if (!conversationForReceiver) {
+      // Create a new conversation For Receiver
+      conversationForReceiver = new Conversation({
+        senderId: receiverId,
+        participants: [{ receiverId: senderId, lastMessage: { ...lastMessage } }],
+      });
+    } else {
+      // Update existing conversation For Receiver
+      const receiverIndex = conversationForReceiver.participants.findIndex(
+        (partner) => partner.receiverId === senderId
+      );
+      if (receiverIndex === -1) {
+        conversationForReceiver.participants.push({
+          senderId: senderId,
+          lastMessage: { ...lastMessage },
+        });
+      } else {
+        conversationForReceiver.participants[receiverIndex].lastMessage = {
+          ...lastMessage,
+        };
+      }
+    }
+
+    await conversationForSender.save();
+    await conversationForReceiver.save();
+    res.status(200).json({ conversationForSender });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
