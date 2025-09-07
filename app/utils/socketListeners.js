@@ -30,9 +30,75 @@ export const SocketListeners = (server) => {
     }
   })();
 
-  //  socket.io connnection
+  //  Socket.io connnection
   IO.on("connection", (socket) => {
     console.log("socket on with id " + socket.id);
+
+    // start call
+    socket.on("start-call", async ({ from, to, roomId }) => {
+      try {
+        const socketReceiverId = await pubClient.get(`user:${to}`);
+        const socketCallerId = await pubClient.get(`user:${from}`);
+        if(socketReceiverId){
+          socket.to(socketReceiverId).emit("incoming-call", { from, roomId });
+        }else{
+          socket.to(socketCallerId).emit("receiver-offline");
+        }
+        
+      } catch (error) {
+        console.log("Redis error during start call.." + error);
+      }
+    });
+
+    // Callee accpets
+    socket.on("accept-call", async ({ to }) => {
+      const callerSocketId = await pubClient.get(`user:${to}`);
+      if (callerSocketId) {
+        IO.to(callerSocketId).emit("call-accepted");
+      }
+    });
+
+    // Callee reject
+    socket.on("reject-call", async ({ to }) => {
+      const callerSocketId = await pubClient.get(`user:${to}`);
+      if (callerSocketId) {
+        console.log("call rejected");
+        IO.to(callerSocketId).emit("call-rejected");
+      }
+    });
+
+    //  Call ended
+    socket.on("end-call", async ({ to,roomId }) => {
+      console.log(to);
+      const callerSocketId = await pubClient.get(`user:${to}`);
+      if (callerSocketId) {
+        console.log("call ended");
+        IO.to(roomId).emit("call-ended");
+      }
+    });
+
+    //  Join room
+    socket.on("join-room", ({ roomId }) => {
+      socket.join(roomId);
+      socket.to(roomId).emit("user-joined", socket.id);
+    });
+
+    // Offer
+    socket.on("offer", ({ roomId, offer }) => {
+      socket.to(roomId).emit("offer", { offer, sender: socket.id });
+    });
+
+    // Forward answer
+    socket.on("answer", ({ roomId, answer }) => {
+      socket.to(roomId).emit("answer", { sender: socket.id, answer });
+    });
+
+    // Forward ICE candidates
+    socket.on("ice-candidate", ({ roomId, candidate }) => {
+      socket.to(roomId).emit("ice-candidate", { sender: socket.id, candidate });
+    });
+
+    // **************** Messages linsteners*******************
 
     // when user joins
     socket.on("join", async (userId) => {
@@ -44,88 +110,6 @@ export const SocketListeners = (server) => {
       } catch (err) {
         console.error("Redis error in join:", err);
       }
-    });
-
-    //  User join the room
-    socket.on("join-room", ({ roomId }) => {
-      socket.join(roomId);
-      console.log("user room id is:" + roomId);
-      socket.to(roomId).emit("user-joined", socket.id);
-    });
-
-    // Offer
-    socket.on("offer", ({ roomId, offer }) => {
-      socket.to(roomId).emit("offer", { offer, sender: socket.id });
-    });
-
-    // start call
-    socket.on("start-call", async ({ from, to, roomId }) => {
-      try {
-        const socketReceiverId = await pubClient.get(`user:${to}`);
-        console.log("call is sender from user " + from);
-        socket.to(socketReceiverId).emit("incoming-call", { from, roomId });
-      } catch (error) {
-        console.log("Redis error during start call.." + error);
-      }
-    });
-
-    // Callee accpets
-    socket.on("accept-call", async ({ from }) => {
-      const callerSocketId = await pubClient.get(`user:${from}`);
-      if (callerSocketId) {
-        IO.to(callerSocketId).emit("call-accepted");
-      }
-    });
-
-    // Callee reject
-    socket.on("reject-call", async ({ from }) => {
-      const callerSocketId = await pubClient.get(`user:${from}`);
-
-      if (callerSocketId) {
-        console.log("call rejected");
-        IO.to(callerSocketId).emit("call-rejected");
-      }
-    });
-
-    //  Call ended
-    socket.on("end-call", async () => {
-      const callerSocketId = await pubClient.get(`user:${from}`);
-
-      if (callerSocketId) {
-        console.log("call ended");
-        IO.to(callerSocketId).emit("call-ended");
-      }
-    });
-
-    // Answer
-    socket.on("answer", ({ roomId, answer }) => {
-      socket.to(roomId).emit("answer", { answer, sender: socket.id });
-    });
-
-    // ICE Candidates
-    socket.on("ice-candidate", ({ roomId, candidate }) => {
-      socket.to(roomId).emit("ice-candidate", { candidate, sender: socket.id });
-    });
-
-    //  Join room
-    socket.on("join-room", (roomId) => {
-      socket.join(roomId);
-      socket.to(roomId).emit("user-joined", socket.id);
-    });
-
-    // Forward offer
-    socket.on("offer", ({ roomId, offer }) => {
-      socket.to(roomId).emit("offer", { sender: socket.id, offer });
-    });
-
-    // Forward answer
-    socket.on("answer", ({ roomId, answer }) => {
-      socket.to(roomId).emit("answer", { sender: socket.id, answer });
-    });
-
-    // Forward ICE candidates
-    socket.on("ice-candidate", ({ roomId, candidate }) => {
-      socket.to(roomId).emit("ice-candidate", { sender: socket.id, candidate });
     });
 
     //  when user typing
