@@ -6,13 +6,13 @@ import { setOnline } from "../routes/userRouter.js";
 export const SocketListeners = (server) => {
   const IO = new Server(server, {
     cors: {
-      origin: "http://localhost:5173", // Vite dev server
+      origin: process.env.FRONTEND_URL,
       methods: ["GET", "POST"],
     },
   });
 
   // Use correct Redis URL (adjust for your setup)
-  const pubClient = createClient({ url: "redis://127.0.0.1:6379" });
+  const pubClient = createClient({ url: process.env.REDIS_URL });
   const subClient = pubClient.duplicate();
 
   pubClient.on("error", (err) => console.error("Redis Pub Error", err));
