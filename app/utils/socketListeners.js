@@ -62,17 +62,14 @@ export const SocketListeners = (server) => {
     socket.on("reject-call", async ({ to }) => {
       const callerSocketId = await pubClient.get(`user:${to}`);
       if (callerSocketId) {
-        console.log("call rejected");
         IO.to(callerSocketId).emit("call-rejected");
       }
     });
 
     //  Call ended
     socket.on("end-call", async ({ to,roomId }) => {
-      console.log(to);
       const callerSocketId = await pubClient.get(`user:${to}`);
       if (callerSocketId) {
-        console.log("call ended");
         IO.to(roomId).emit("call-ended");
       }
     });
@@ -114,7 +111,6 @@ export const SocketListeners = (server) => {
 
     //  when user typing
     socket.on("typing", async (receiverId) => {
-      console.log(receiverId);
       try {
         const socketReceiverId = await pubClient.get(`user:${receiverId}`);
         if (socketReceiverId) {

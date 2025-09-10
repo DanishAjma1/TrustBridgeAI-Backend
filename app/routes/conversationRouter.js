@@ -5,30 +5,12 @@ import Conversation from "../models/conversation.js";
 const conversationRouter = Router();
 
 conversationRouter.get("/get-conversations-for-user", async (req, res) => {
-  let updateConversationMessage = null;
   try {
     await connectDB();
-    const { currentUserId, partnerId } = req.query;
+    const { currentUserId } = req.query;
     const filter = { senderId: currentUserId };
     const conversation = await Conversation.findOne(filter);
-
-    if (conversation) {
-      const updatedConversationIndex = conversation.participants.findIndex(
-        (part) => {
-          return part.receiverId === partnerId;
-        }
-      );
-
-      if (updatedConversationIndex !== -1) {
-        updateConversationMessage = {
-          ...conversation.participants[updatedConversationIndex].lastMessage,
-          isRead: true,
-        };
-        conversation.participants[updatedConversationIndex].lastMessage = updateConversationMessage;
-      }
-    }
-    await conversation.save();
-    res.status(200).json({ conversation });
+    res.status(200).json({ conversation } || null);
   } catch (error) {
     res.status(400).json(error.message);
   }

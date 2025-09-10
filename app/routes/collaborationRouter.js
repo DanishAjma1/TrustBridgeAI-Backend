@@ -28,7 +28,6 @@ collaborationRouter.get(
     try {
       await connectDB();
       const { enter_id } = req.params;
-      console.log(enter_id);
       const filter = { enter_id };
       const requests = await CollaborationRequest.find(filter);
       res.status(201).json({ requests, message: "request sent" });
