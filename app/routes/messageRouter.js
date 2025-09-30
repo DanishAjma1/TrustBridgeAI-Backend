@@ -8,6 +8,7 @@ messageRouter.get("/get-messages-btw-users", async (req, res) => {
   try {
     await connectDB();
     const { sender, receiver } = req.query;
+    
     // Find messages between the users
     const messages = await Message.find({
       $or: [

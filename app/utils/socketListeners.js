@@ -35,20 +35,28 @@ export const SocketListeners = (server) => {
     console.log("socket on with id " + socket.id);
 
     // start call
-    socket.on("start-call", async ({ from, to, roomId }) => {
-      try {
-        const socketReceiverId = await pubClient.get(`user:${to}`);
-        const socketCallerId = await pubClient.get(`user:${from}`);
-        if(socketReceiverId){
-          socket.to(socketReceiverId).emit("incoming-call", { from, roomId });
-        }else{
-          socket.to(socketCallerId).emit("receiver-offline");
+    socket.on(
+      "start-call",
+      async ({ from, to, roomId, callType, fromName }) => {
+        try {
+          const socketReceiverId = await pubClient.get(`user:${to}`);
+          const socketCallerId = await pubClient.get(`user:${from}`);
+
+          console.log("user entered");
+          if (socketReceiverId) {
+            console.log("user online");
+            socket
+              .to(socketReceiverId)
+              .emit("incoming-call", { from, roomId, callType, fromName });
+          } else {
+            console.log("user exited");
+            IO.to(socketCallerId).emit("receiver-offline");
+          }
+        } catch (error) {
+          console.log("Redis error during start call.." + error);
         }
-        
-      } catch (error) {
-        console.log("Redis error during start call.." + error);
       }
-    });
+    );
 
     // Callee accpets
     socket.on("accept-call", async ({ to }) => {
@@ -67,33 +75,33 @@ export const SocketListeners = (server) => {
     });
 
     //  Call ended
-    socket.on("end-call", async ({ to,roomId }) => {
+    socket.on("end-call", async ({ to, roomId }) => {
       const callerSocketId = await pubClient.get(`user:${to}`);
       if (callerSocketId) {
-        IO.to(roomId).emit("call-ended");
+        IO.to(callerSocketId).emit("call-ended");
       }
     });
 
     //  Join room
-    socket.on("join-room", ({ roomId }) => {
-      socket.join(roomId);
-      socket.to(roomId).emit("user-joined", socket.id);
-    });
+    // socket.on("join-room", ({ roomId }) => {
+    //   socket.join(roomId);
+    //   socket.to(roomId).emit("user-joined", socket.id);
+    // });
 
     // Offer
-    socket.on("offer", ({ roomId, offer }) => {
-      socket.to(roomId).emit("offer", { offer, sender: socket.id });
-    });
+    // socket.on("offer", ({ roomId, offer }) => {
+    //   socket.to(roomId).emit("offer", { offer, sender: socket.id });
+    // });
 
-    // Forward answer
-    socket.on("answer", ({ roomId, answer }) => {
-      socket.to(roomId).emit("answer", { sender: socket.id, answer });
-    });
+    // // Forward answer
+    // socket.on("answer", ({ roomId, answer }) => {
+    //   socket.to(roomId).emit("answer", { sender: socket.id, answer });
+    // });
 
-    // Forward ICE candidates
-    socket.on("ice-candidate", ({ roomId, candidate }) => {
-      socket.to(roomId).emit("ice-candidate", { sender: socket.id, candidate });
-    });
+    // // Forward ICE candidates
+    // socket.on("ice-candidate", ({ roomId, candidate }) => {
+    //   socket.to(roomId).emit("ice-candidate", { sender: socket.id, candidate });
+    // });
 
     // **************** Messages linsteners*******************
 

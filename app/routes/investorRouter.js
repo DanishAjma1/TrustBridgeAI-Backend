@@ -10,15 +10,28 @@ investorRouter.get("/get-investors", async (req, res) => {
     await connectDB();
     const investors = await User.aggregate([
       {
-        $match:{
-          role:"investor"
-        }
+        $match: {
+          role: "investor",
+        },
       },
       {
         $lookup: {
           from: "investors",
-          localField: "_id",
-          foreignField: "userId",
+          let: { user_id: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$userId", "$$user_id"] } } },
+            {
+              $project: {
+                userId:1,
+                investmentInterests: 1,
+                investmentStage: 1,
+                totalInvestments: 1,
+                totalInvestments: 1,
+                maximumInvestment: 1,
+                minimumInvestment: 1,
+              },
+            },
+          ],
           as: "investorInfo",
         },
       },
@@ -35,6 +48,8 @@ investorRouter.get("/get-investors", async (req, res) => {
       },
       {
         $project: {
+          _id: 0,
+          __v: 0,
           password: 0,
           investorInfo: 0,
         },
@@ -79,6 +94,7 @@ investorRouter.get("/get-investor-by-id/:id", async (req, res) => {
       {
         $project: {
           password: 0,
+          __v:0,
           investorInfo: 0,
         },
       },
@@ -104,16 +120,11 @@ investorRouter.put("/update-profile/:id", async (req, res) => {
       upsert: true,
       runValidators: true,
     };
-    const investor = await Investor.findOneAndUpdate(
-      filter,
-      update,
-      options
-    );
-    res.status(200).json(investor);
+    await Investor.findOneAndUpdate(filter, update, options);
+    res.status(200).json({message:"Data updated successfully."});
   } catch (err) {
     res.status(400).json(err.message);
   }
 });
-
 
 export default investorRouter;

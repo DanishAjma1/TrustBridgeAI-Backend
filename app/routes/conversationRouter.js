@@ -9,7 +9,9 @@ conversationRouter.get("/get-conversations-for-user", async (req, res) => {
     await connectDB();
     const { currentUserId } = req.query;
     const filter = { senderId: currentUserId };
+
     const conversation = await Conversation.findOne(filter);
+
     res.status(200).json({ conversation } || null);
   } catch (error) {
     res.status(400).json(error.message);
@@ -75,6 +77,7 @@ conversationRouter.post("/update-conversations-for-user", async (req, res) => {
 
     await conversationForSender.save();
     await conversationForReceiver.save();
+    
     res.status(200).json({ conversationForSender });
   } catch (error) {
     res.status(400).json({ error: error.message });
