@@ -4,7 +4,7 @@ const enterprenuerSchema = mongoose.Schema({
   userId:{type:mongoose.Schema.Types.ObjectId,ref:"User"},
   startupName: String,
   pitchSummary: String,
-  fundingNeeded: String,
+  fundingNeeded: Number,
   industry: String,
   foundedYear: Number,
   teamSize: Number,
