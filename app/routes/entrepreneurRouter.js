@@ -102,7 +102,7 @@ enterpreneurRouter.get("/get-entrepreneur-by-id/:id", async (req, res) => {
       },
       {
         $addFields: {
-          userId: "$_id", 
+          userId: "$_id",
         },
       },
       {
