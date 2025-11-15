@@ -17,8 +17,20 @@ enterpreneurRouter.get("/get-entrepreneurs", async (req, res) => {
       {
         $lookup: {
           from: "enterpreneurs",
-          localField: "_id",
-          foreignField: "userId",
+          let: { user_id: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$userId", "$$user_id"] } } },
+            {
+              $project: {
+                startupName: 1,
+                industry: 1,
+                foundedYear: 1,
+                pitchSummary: 1,
+                fundingNeeded: 1,
+                teamSize: 1,
+              },
+            },
+          ],
           as: "userInfo",
         },
       },
@@ -26,6 +38,11 @@ enterpreneurRouter.get("/get-entrepreneurs", async (req, res) => {
         $unwind: {
           path: "$userInfo",
           preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $addFields: {
+          userId: "$_id",
         },
       },
       {
@@ -38,6 +55,8 @@ enterpreneurRouter.get("/get-entrepreneurs", async (req, res) => {
       {
         $project: {
           password: 0,
+          __v: 0,
+          _id: 0,
           userInfo: 0,
         },
       },
@@ -74,6 +93,11 @@ enterpreneurRouter.get("/get-entrepreneur-by-id/:id", async (req, res) => {
         },
       },
       {
+        $addFields: {
+          userId: "$_id",
+        },
+      },
+      {
         $replaceRoot: {
           newRoot: {
             $mergeObjects: ["$$ROOT", "$userInfo"],
@@ -83,6 +107,8 @@ enterpreneurRouter.get("/get-entrepreneur-by-id/:id", async (req, res) => {
       {
         $project: {
           password: 0,
+          __v: 0,
+          _id: 0,
           userInfo: 0,
         },
       },
@@ -115,6 +141,30 @@ enterpreneurRouter.put("/update-profile/:id", async (req, res) => {
     res.status(200).json(entrepreneur);
   } catch (err) {
     res.status(400).json(err.message);
+  }
+});
+
+enterpreneurRouter.get("/get-successful-entrepreneurs", async (req, res) => {
+  try {
+    await connectDB();
+    const entrepreneurs = await Enterprenuer.find({})
+      .sort({ foundedYear: -1, teamSize: -1 })
+      .limit(3);
+    res.json(entrepreneurs);
+  } catch (error) {
+    res.status(400).json(error.message);
+  }
+});
+
+enterpreneurRouter.get("/get-successful-entrepreneurs", async (req, res) => {
+  try {
+    await connectDB();
+    const entrepreneurs = await Enterprenuer.find({})
+      .sort({ foundedYear: -1, teamSize: -1 })
+      .limit(3);
+    res.json(entrepreneurs);
+  } catch (error) {
+    res.status(400).json(error.message);
   }
 });
 

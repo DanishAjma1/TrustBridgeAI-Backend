@@ -11,11 +11,14 @@ import messageRouter from "./app/routes/messageRouter.js";
 import conversationRouter from "./app/routes/conversationRouter.js";
 import { SocketListeners } from "./app/utils/socketListeners.js";
 import collaborationRouter from "./app/routes/collaborationRouter.js";
-
+import agoraRouter from "./app/config/agoraRoute.js";
+import googleRouter from "./app/routes/googleOauthRouter.js";
+import linkedinRouter from "./app/routes/linkedInoAuthRouter.js";
+import adminRouter from "./app/routes/adminRouter.js";
 const app = express();
 const server = createServer(app);
 
-const IO = SocketListeners(server);
+SocketListeners(server);
 
 app.use(cookieParser());
 app.use(bodyParser.json());
@@ -25,14 +28,20 @@ app.use(
     credentials: true,
   })
 );
+
 app.use("/uploads", express.static("uploads"));
 app.use("/auth", authRouter);
-app.use("/requests",collaborationRouter);
+app.use("/auth/linkedin", linkedinRouter);
+app.use("/auth/google", googleRouter);
+app.use("/requests", collaborationRouter);
 app.use("/conversation", conversationRouter);
 app.use("/message", messageRouter);
 app.use("/user", userRouter);
 app.use("/entrepreneur", enterpreneurRouter);
 app.use("/investor", investorRouter);
+app.use("/agora", agoraRouter);
+app.use("/admin", adminRouter);
+
 server.listen(5000, () => {
   console.log("server is listening on port 5000");
 });

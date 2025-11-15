@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 const conversationScehma = mongoose.Schema({
-  senderId: String,
+  senderId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   participants: [
     {
       receiverId: { type: String, required: true },
