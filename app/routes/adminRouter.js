@@ -1,12 +1,14 @@
 import { Router } from "express";
 import { connectDB } from "../config/mongoDBConnection.js";
 import Enterprenuer from "../models/enterpreneur.js";
+import Investor from "../models/investor.js";
 import Campaign from "../models/campaign.js";
 import multer from "multer";
 import moment from "moment";
 const adminRouter = Router();
 import fs from "fs";
 import User from "../models/user.js";
+import RiskEvent from "../models/riskEvent.js";
 const uploadDir = "uploads";
 
 if (!fs.existsSync(uploadDir)) {
@@ -47,10 +49,12 @@ adminRouter.get("/dashboard", async (req, res) => {
   }
 });
 
-adminRouter.get("/users", async (req, res) => {
+adminRouter.get("/get-users", async (req, res) => {
   try {
     await connectDB();
-    const users = await User.find({}, "-password");
+    const users = await User.find({
+      $or: [{ role: "entrepreneur" }, { role: "investor" }],
+    });
     res.status(200).json(users);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch users", error });
@@ -73,7 +77,6 @@ adminRouter.delete("/user/:id", async (req, res) => {
 adminRouter.post("/campaigns", upload.array("images", 5), async (req, res) => {
   try {
     await connectDB();
-    console.log("📩 /admin/campaigns route hit!");
     res.status(200).send("Campaign route OK");
     const { title, description, goalAmount, startDate, endDate, category } =
       req.body;
@@ -172,8 +175,6 @@ adminRouter.get("/users/users-last-year", async (req, res) => {
       .map((_, i) => moment().subtract(i, "months").format("MMM"))
       .reverse();
 
-    console.log(moment().subtract(12, "months").toDate());
-
     const users = await User.aggregate([
       {
         $match: {
@@ -190,7 +191,6 @@ adminRouter.get("/users/users-last-year", async (req, res) => {
       },
     ]);
 
-    console.log(users);
     const finalData = last12Months.map((month, i) => {
       const found = users.find((u) => u._id === i + 1);
       return {
@@ -209,53 +209,108 @@ adminRouter.get("/users/users-last-year", async (req, res) => {
 adminRouter.get("/users/startup-by-industry", async (req, res) => {
   try {
     await connectDB();
-    const users = await User.aggregate([
-      {
-        $match: {
-          role: "entrepreneur",
-        },
-      },
-      {
-        $lookup: {
-          from: "entrepreneurs",
-          let: { user_id: "$_id" },
-          pipeline: [
-            { $match: { $expr: { $eq: ["$userId", "$$user_id"] } } },
-            {
-              $project: {
-                industry: 1,
-              },
-            },
-          ],
-          as: "userInfo",
-        },
-      },
-      {
-        $unwind: {
-          path: "$userInfo",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      {
-        $replaceRoot: {
-          newRoot: {
-            $mergeObjects: ["$$ROOT", "$userInfo"],
-          },
-        },
-      },
+    const users = await Enterprenuer.aggregate([
       {
         $group: {
           _id: "$industry",
           count: { $sum: 1 },
         },
       },
+      {
+        $project: {
+          _id: 0,
+          industry: "$_id",
+          count: 1,
+        },
+      },
     ]);
 
-    console.log(users);
+    res.json({ users });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
+
+adminRouter.get("/get-investor-stages", async (req, res) => {
+  await connectDB();
+  const investors = await Investor.aggregate({});
+});
+
+// =====================
+//  GET FLAGS SUMMARY
+// =====================
+adminRouter.get("/flags", async (req, res) => {
+  try {
+    await connectDB();
+    const summary = await RiskEvent.aggregate([
+      {
+        $group: {
+          _id: "$eventType",
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          eventType: "$_id",
+          count: 1,
+        },
+      },
+    ]);
+
+    // monthly count for chart
+    const last12Months = [...Array(12)]
+      .map((_, i) => moment().subtract(i, "months").format("MMM"))
+      .reverse();
+
+    const monthly = await RiskEvent.aggregate([
+      {
+        $match: {
+          createdAt: {
+            $gte: moment().subtract(12, "months").toDate(),
+          },
+        },
+      },
+      {
+        $group: {
+          _id: { $month: "$createdAt" },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const finalData = last12Months.map((month, i) => {
+      const found = monthly.find((m) => m._id === i + 1);
+      return { month, count: found ? found.count : 0 };
+    });
+    console.log(monthly);
+    console.log(summary);
+
+    res.json({ summary, finalData });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error fetching risk flags" });
+  }
+});
+
+export const logRiskEvent = async ({
+  email,
+  eventType,
+  riskScore,
+  isFraud = false,
+}) => {
+  try {
+    await RiskEvent.create({
+      email,
+      eventType,
+      riskScore,
+      isFraud,
+    });
+    console.log("risk detected");
+  } catch (err) {
+    console.error("Risk Event Log Error:", err);
+  }
+};
 
 export default adminRouter;

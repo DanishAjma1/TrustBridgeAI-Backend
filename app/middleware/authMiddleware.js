@@ -4,21 +4,46 @@ import jwt from "jsonwebtoken";
 import sendMailToUser from "../utils/addToMailList.js";
 import bcrypt from "bcryptjs";
 import { connectDB } from "../config/mongoDBConnection.js";
+import { logRiskEvent } from "../routes/adminRouter.js";
 const authRouter = Router();
+
+let failed_attempts = 0;
+
+const riskEventDetection = (email) => {
+  failed_attempts += 1;
+  if (failed_attempts > 1) {
+    logRiskEvent({
+      email,
+      eventType: "failed_login",
+      riskScore: 10,
+      isFraud: false,
+    });
+  }
+  if (failed_attempts > 3) {
+    logRiskEvent({
+      email,
+      eventType: "multiple_time_failed_login",
+      riskScore: 20,
+      isFraud: failed_attempts >= 7,
+    });
+  }
+};
 
 //Resgister User
 authRouter.post("/register", async (req, res) => {
   try {
     await connectDB();
-    const { role } = req.body;
-    if (role === "investor" || role === "entrepreneur" || role === "admin" ) {
+    const { role, email } = req.body;
+    if (role === "investor" || role === "entrepreneur" || role === "admin") {
       const filter = { role: req.body.role, email: req.body.email };
       const userfound = await User.findOne(filter);
 
       if (userfound) {
+        riskEventDetection(email);
         return res.status(400).json({ message: "User already exists" });
       }
     } else {
+      riskEventDetection(email);
       return res.status(400).json({ message: "This role isn't exist." });
     }
 
@@ -48,12 +73,12 @@ authRouter.post("/register", async (req, res) => {
 //Logging in..
 authRouter.post("/login", async (req, res) => {
   try {
-    console.log(req.body);
     await connectDB();
     const user = await User.findOne({ email: req.body.email }).select(
       "+password"
     );
     if (!user) {
+      riskEventDetection(req.body.email);
       return res
         .status(404)
         .json({ message: "The user not found please register first.." });
@@ -61,6 +86,7 @@ authRouter.post("/login", async (req, res) => {
 
     const isMatch = await bcrypt.compare(req.body.password, user.password);
     if (!isMatch) {
+      riskEventDetection(req.body.email);
       return res.status(400).json({ message: "Invalid email or password" });
     }
 
@@ -94,8 +120,8 @@ authRouter.post("/login-with-oauth", async (req, res) => {
     await connectDB();
     const { userToken, role } = req.body;
     const userInfo = jwt.verify(userToken, process.env.JWT_SECRET);
-    
-    let user = await User.findOne({email:userInfo.email});
+
+    let user = await User.findOne({ email: userInfo.email });
     if (!user) {
       user = new User({
         name: userInfo.name,
@@ -105,6 +131,7 @@ authRouter.post("/login-with-oauth", async (req, res) => {
       await user.save();
     } else {
       if (user.role !== req.body.role) {
+        riskEventDetection(req.body.email);
         return res
           .status(400)
           .json({ message: "You are trying to login in with wrong role.." });
@@ -123,7 +150,7 @@ authRouter.post("/login-with-oauth", async (req, res) => {
       user: { ...userObj },
     });
   } catch (err) {
-    console.log(err);
+    console.error(err);
     res
       .status(400)
       .json({ message: "bad request while signing it.." + err.message });
