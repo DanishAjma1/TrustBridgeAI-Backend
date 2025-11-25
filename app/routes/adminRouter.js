@@ -185,17 +185,38 @@ adminRouter.get("/users/users-last-year", async (req, res) => {
       },
       {
         $group: {
-          _id: { $month: "$createdAt" },
+          _id: {
+            month: { $month: "$createdAt" },
+            role: "$role",
+          },
           count: { $sum: 1 },
         },
       },
+      {
+        $project: {
+          _id: 0,
+          month: "$_id.month",
+          role: "$_id.role",
+          count: 1,
+        },
+      },
+      { $sort: { month: 1 } },
     ]);
 
-    const finalData = last12Months.map((month, i) => {
-      const found = users.find((u) => u._id === i + 1);
+    const finalData = last12Months.map((monthName, index) => {
+      const monthNumber = index + 1;
+
+      const investorData = users.find(
+        (d) => d.month === monthNumber && d.role === "investor"
+      );
+      const entrepreneurData = users.find(
+        (d) => d.month === monthNumber && d.role === "entrepreneur"
+      );
+
       return {
-        month,
-        count: found ? found.count : 0,
+        month: monthName,
+        investor: investorData ? investorData.count : 0,
+        entrepreneur: entrepreneurData ? entrepreneurData.count : 0,
       };
     });
 
@@ -225,7 +246,7 @@ adminRouter.get("/users/startup-by-industry", async (req, res) => {
       },
     ]);
 
-    res.json({ users });
+    res.json(users);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -240,13 +261,14 @@ adminRouter.get("/get-investor-stages", async (req, res) => {
 // =====================
 //  GET FLAGS SUMMARY
 // =====================
-adminRouter.get("/flags", async (req, res) => {
+adminRouter.get("/risk-detection-flags", async (req, res) => {
   try {
     await connectDB();
     const summary = await RiskEvent.aggregate([
       {
         $group: {
           _id: "$eventType",
+          email: { $first: "$email" },
           count: { $sum: 1 },
         },
       },
@@ -255,6 +277,7 @@ adminRouter.get("/flags", async (req, res) => {
           _id: 0,
           eventType: "$_id",
           count: 1,
+          email: 1,
         },
       },
     ]);
@@ -264,7 +287,7 @@ adminRouter.get("/flags", async (req, res) => {
       .map((_, i) => moment().subtract(i, "months").format("MMM"))
       .reverse();
 
-    const monthly = await RiskEvent.aggregate([
+    const finalData = await RiskEvent.aggregate([
       {
         $match: {
           createdAt: {
@@ -274,18 +297,20 @@ adminRouter.get("/flags", async (req, res) => {
       },
       {
         $group: {
-          _id: { $month: "$createdAt" },
+          _id: "$eventType",
+          riskScore: { $first: "$riskScore" },
           count: { $sum: 1 },
         },
       },
+      {
+        $project: {
+          _id: 0,
+          eventType: "$_id",
+          count: 1,
+          riskScore: 1,
+        },
+      },
     ]);
-
-    const finalData = last12Months.map((month, i) => {
-      const found = monthly.find((m) => m._id === i + 1);
-      return { month, count: found ? found.count : 0 };
-    });
-    console.log(monthly);
-    console.log(summary);
 
     res.json({ summary, finalData });
   } catch (error) {
