@@ -18,7 +18,7 @@ import adminRouter from "./app/routes/adminRouter.js";
 const app = express();
 const server = createServer(app);
 
-SocketListeners(server);
+// SocketListeners(server);
 
 app.use(cookieParser());
 app.use(bodyParser.json());
