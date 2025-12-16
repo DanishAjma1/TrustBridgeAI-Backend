@@ -3,8 +3,8 @@ const { RtcRole } = pkg;
 import express from "express";
 const agoraRouter = express.Router();
 
-const APP_ID = "5e3db4d74aaa43ff8eeee3ad9f08efd8";
-const APP_CERTIFICATE = "c2a91e0fcbd64e8a87e9cb52136aaed7"; // Only needed if using App Certificate
+const APP_ID = process.env.APP_ID;
+const APP_CERTIFICATE = process.env.APP_CERTIFICATE; // Only needed if using App Certificate
 
 agoraRouter.get("/rtc/:channel/:uid", (req, res) => {
   try {
