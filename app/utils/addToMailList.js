@@ -12,7 +12,7 @@ export default function sendMailToUser(email, message, sub){
     });
 
     const mailOptions = {
-      from: "Nexus <" + process.env.USER_EMAIL + ">",
+      from: "TrustBridge AI <" + process.env.USER_EMAIL + ">",
       to: email,
       subject: sub,
       html: message,
