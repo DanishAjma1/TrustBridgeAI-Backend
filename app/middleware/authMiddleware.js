@@ -721,6 +721,21 @@ authRouter.delete("/trusted-devices/:userId/:deviceId", async (req, res) => {
     res.status(500).json({ message: "Failed to remove trusted device" });
   }
 });
+// Clear all trusted devices for a user
+authRouter.delete("/trusted-devices/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    await TwoFactorAuth.clearAllTrustedDevices(userId);
+    
+    res.status(200).json({
+      message: "All trusted devices removed successfully"
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to clear trusted devices" });
+  }
+});
 
 // Update security settings
 authRouter.patch("/security-settings/:userId", async (req, res) => {

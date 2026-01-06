@@ -217,6 +217,27 @@ class TwoFactorAuth {
       throw error;
     }
   }
+  // Delete all trusted devices for a user
+static async clearAllTrustedDevices(userId) {
+  try {
+    await connectDB();
+
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    
+    user.trustedDevices = [];
+
+    await user.save();
+    return true;
+  } catch (error) {
+    console.error("Error clearing all trusted devices:", error);
+    throw error;
+  }
+}
+
   
     // Get device info from request
   static getDeviceInfo(req) {
