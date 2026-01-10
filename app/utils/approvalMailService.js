@@ -15,7 +15,7 @@ console.log("MAIL PASS EXISTS:", !!process.env.USER_PASSWORD);
 
 export const sendApprovalMail = (email, userName, role, approvalToken) => {
   return new Promise((resolve, reject) => {
-    const approvalLink = `${process.env.FRONTEND_URL}/account-approved?token=${approvalToken}`;
+    const approvalLink = `${process.env.FRONTEND_URL}/login`;
     
     const htmlMessage = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
