@@ -10,8 +10,7 @@ const transporter = nodemailer.createTransport({
     pass: process.env.USER_PASSWORD,
   },
 });
-console.log("MAIL USER:", process.env.USER_EMAIL);
-console.log("MAIL PASS EXISTS:", !!process.env.USER_PASSWORD);
+
 
 export const sendApprovalMail = (email, userName, role, approvalToken) => {
   return new Promise((resolve, reject) => {

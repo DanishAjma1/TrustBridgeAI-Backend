@@ -341,13 +341,7 @@ export const logRiskEvent = async ({
   }
 };
 
-// =====================
-// ACCOUNT APPROVAL ROUTES
-// =====================
 
-/**
- * Get pending users for approval (entrepreneurs and investors only)
- */
 adminRouter.get("/pending-approvals", async (req, res) => {
   try {
     await connectDB();
@@ -406,9 +400,7 @@ adminRouter.get("/pending-approvals", async (req, res) => {
   }
 });
 
-/**
- * Get all approved users (entrepreneurs and investors)
- */
+
 adminRouter.get("/approved-users", async (req, res) => {
   try {
     await connectDB();
@@ -428,9 +420,7 @@ adminRouter.get("/approved-users", async (req, res) => {
   }
 });
 
-/**
- * Get all rejected users (entrepreneurs and investors)
- */
+
 adminRouter.get("/rejected-users", async (req, res) => {
   try {
     await connectDB();
@@ -438,11 +428,37 @@ adminRouter.get("/rejected-users", async (req, res) => {
     const rejectedUsers = await User.find({
       $or: [{ role: "entrepreneur" }, { role: "investor" }],
       approvalStatus: "rejected"
-    }, "-password -twoFactorSecret -backupCodes").lean();
+    }, "-password -twoFactorSecret -backupCodes")
+    .select("_id name email role approvalStatus rejectionReason approvalDate createdAt") // Explicitly select fields
+    .lean();
+
+    // For each rejected user, get their detailed profile (entrepreneur/investor)
+    const usersWithDetails = await Promise.all(
+      rejectedUsers.map(async (user) => {
+        let details = null;
+        
+        if (user.role === "entrepreneur") {
+          details = await Enterprenuer.findOne({ userId: user._id }).lean();
+        } else if (user.role === "investor") {
+          details = await Investor.findOne({ userId: user._id }).lean();
+        }
+
+        return {
+          ...user,
+          details: {
+            ...details,
+            rejectionReason: user.rejectionReason, // Add rejectionReason to details
+            rejectedAt: user.approvalDate // Add rejection date as rejectedAt
+          },
+          // Also keep at root level for backward compatibility
+          rejectionReason: user.rejectionReason
+        };
+      })
+    );
 
     res.status(200).json({
-      users: rejectedUsers,
-      total: rejectedUsers.length
+      users: usersWithDetails,
+      total: usersWithDetails.length
     });
   } catch (error) {
     console.error("Error fetching rejected users:", error);
@@ -450,10 +466,7 @@ adminRouter.get("/rejected-users", async (req, res) => {
   }
 });
 
-/**
- * Approve a user account
- * POST /admin/approve-user/:userId
- */
+
 adminRouter.post("/approve-user/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
