@@ -138,6 +138,17 @@ enterpreneurRouter.put("/update-profile/:id", async (req, res) => {
       update,
       options
     );
+
+    // Set approval status to pending when profile is first created/updated
+    // Only set to pending if it's a new document and not already approved
+    if (options.upsert) {
+      const user = await User.findById(id);
+      if (user && user.approvalStatus !== "approved") {
+        user.approvalStatus = "pending";
+        await user.save();
+      }
+    }
+
     res.status(200).json(entrepreneur);
   } catch (err) {
     res.status(400).json(err.message);

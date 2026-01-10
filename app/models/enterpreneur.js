@@ -13,6 +13,12 @@ const enterprenuerSchema = mongoose.Schema({
   growthRate:Number,
   marketOpportunity:String,
   advantage:String,
+  // Approval Fields
+  approvalStatus: { 
+    type: String, 
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'pending'
+  },
 });
 
 const Enterprenuer = mongoose.model("Enterpreneur", enterprenuerSchema);

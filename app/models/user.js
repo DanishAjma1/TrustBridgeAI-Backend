@@ -34,6 +34,23 @@ const UserSchema = mongoose.Schema({
     sessionDuration: { type: Number, default: 30 } // days
   },
   
+  // Account Approval Fields
+  approvalStatus: { 
+    type: String, 
+    enum: ['pending', 'approved', 'rejected'],
+    default: function() {
+      // Admin doesn't need approval
+      if (this.role === 'admin') return 'approved';
+      // Entrepreneur and investor need approval
+      if (this.role === 'entrepreneur' || this.role === 'investor') return 'pending';
+      // Others are auto-approved
+      return 'approved';
+    }
+  },
+  rejectionReason: String,
+  approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  approvalDate: Date,
+  
   createdAt: { type: Date, default: Date.now },
 });
 

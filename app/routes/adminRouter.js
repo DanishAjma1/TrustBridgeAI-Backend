@@ -8,7 +8,10 @@ import moment from "moment";
 const adminRouter = Router();
 import fs from "fs";
 import User from "../models/user.js";
+import RejectionHistory from "../models/rejectionHistory.js";
 import RiskEvent from "../models/riskEvent.js";
+import { sendApprovalMail, sendRejectionMail } from "../utils/approvalMailService.js";
+import jwt from "jsonwebtoken";
 const uploadDir = "uploads";
 
 if (!fs.existsSync(uploadDir)) {
@@ -337,5 +340,388 @@ export const logRiskEvent = async ({
     console.error("Risk Event Log Error:", err);
   }
 };
+
+// =====================
+// ACCOUNT APPROVAL ROUTES
+// =====================
+
+/**
+ * Get pending users for approval (entrepreneurs and investors only)
+ */
+adminRouter.get("/pending-approvals", async (req, res) => {
+  try {
+    await connectDB();
+    
+    // Get pending entrepreneurs
+    const pendingEntrepreneurs = await User.find({
+      role: "entrepreneur",
+      approvalStatus: "pending"
+    }, "-password -twoFactorSecret -backupCodes").lean();
+
+    // Get pending investors
+    const pendingInvestors = await User.find({
+      role: "investor",
+      approvalStatus: "pending"
+    }, "-password -twoFactorSecret -backupCodes").lean();
+
+    // Get entrepreneur details for pending users
+    const entrepreneurDetails = await Promise.all(
+      pendingEntrepreneurs.map(async (user) => {
+        const entrepreneur = await Enterprenuer.findOne({ userId: user._id }).lean();
+        // Check if this email was previously rejected
+        const prev = await RejectionHistory.findOne({ email: user.email }).sort({ rejectedAt: -1 }).lean();
+        return {
+          ...user,
+          details: entrepreneur,
+          previouslyRejected: !!prev,
+          previousRejectionReason: prev?.reason || null,
+          previousRejectionDate: prev?.rejectedAt || null,
+        };
+      })
+    );
+
+    // Get investor details for pending users
+    const investorDetails = await Promise.all(
+      pendingInvestors.map(async (user) => {
+        const investor = await Investor.findOne({ userId: user._id }).lean();
+        const prev = await RejectionHistory.findOne({ email: user.email }).sort({ rejectedAt: -1 }).lean();
+        return {
+          ...user,
+          details: investor,
+          previouslyRejected: !!prev,
+          previousRejectionReason: prev?.reason || null,
+          previousRejectionDate: prev?.rejectedAt || null,
+        };
+      })
+    );
+
+    res.status(200).json({
+      entrepreneurs: entrepreneurDetails,
+      investors: investorDetails,
+      totalPending: pendingEntrepreneurs.length + pendingInvestors.length
+    });
+  } catch (error) {
+    console.error("Error fetching pending approvals:", error);
+    res.status(500).json({ message: "Failed to fetch pending approvals", error: error.message });
+  }
+});
+
+/**
+ * Get all approved users (entrepreneurs and investors)
+ */
+adminRouter.get("/approved-users", async (req, res) => {
+  try {
+    await connectDB();
+    
+    const approvedUsers = await User.find({
+      $or: [{ role: "entrepreneur" }, { role: "investor" }],
+      approvalStatus: "approved"
+    }, "-password -twoFactorSecret -backupCodes").lean();
+
+    res.status(200).json({
+      users: approvedUsers,
+      total: approvedUsers.length
+    });
+  } catch (error) {
+    console.error("Error fetching approved users:", error);
+    res.status(500).json({ message: "Failed to fetch approved users", error: error.message });
+  }
+});
+
+/**
+ * Get all rejected users (entrepreneurs and investors)
+ */
+adminRouter.get("/rejected-users", async (req, res) => {
+  try {
+    await connectDB();
+    
+    const rejectedUsers = await User.find({
+      $or: [{ role: "entrepreneur" }, { role: "investor" }],
+      approvalStatus: "rejected"
+    }, "-password -twoFactorSecret -backupCodes").lean();
+
+    res.status(200).json({
+      users: rejectedUsers,
+      total: rejectedUsers.length
+    });
+  } catch (error) {
+    console.error("Error fetching rejected users:", error);
+    res.status(500).json({ message: "Failed to fetch rejected users", error: error.message });
+  }
+});
+
+/**
+ * Approve a user account
+ * POST /admin/approve-user/:userId
+ */
+adminRouter.post("/approve-user/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const token = req.headers.authorization?.split(" ")[1];
+
+    await connectDB();
+
+    // Verify the user exists and is pending
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.approvalStatus !== "pending") {
+      return res.status(400).json({ 
+        message: `User account is already ${user.approvalStatus}` 
+      });
+    }
+
+    // Get admin info if token provided
+    let adminId = null;
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        adminId = decoded.userId || decoded._id;
+      } catch (err) {
+        console.log("Could not decode admin token");
+      }
+    }
+
+    // Update user approval status
+    const approvalToken = jwt.sign(
+      {
+        userId: user._id,
+        email: user.email,
+        role: user.role,
+        approvalStatus: "approved"
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    user.approvalStatus = "approved";
+    user.approvedBy = adminId;
+    user.approvalDate = new Date();
+    await user.save();
+
+    // Update corresponding model approval status
+    if (user.role === "entrepreneur") {
+      await Enterprenuer.updateOne(
+        { userId: user._id },
+        { approvalStatus: "approved" }
+      );
+    } else if (user.role === "investor") {
+      await Investor.updateOne(
+        { userId: user._id },
+        { approvalStatus: "approved" }
+      );
+    }
+
+    // Send approval email
+    try {
+      await sendApprovalMail(user.email, user.name, user.role, approvalToken);
+    } catch (mailError) {
+      console.error("Mail sending error:", mailError);
+      // Don't fail the approval if email fails, just log it
+    }
+
+    res.status(200).json({
+      message: `${user.role} account approved successfully`,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        approvalStatus: user.approvalStatus,
+        approvalDate: user.approvalDate
+      }
+    });
+  } catch (error) {
+    console.error("Error approving user:", error);
+    res.status(500).json({ message: "Failed to approve user", error: error.message });
+  }
+});
+
+
+adminRouter.post("/reject-user/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { rejectionReason } = req.body;
+
+    if (!rejectionReason || rejectionReason.trim() === "") {
+      return res.status(400).json({ message: "Rejection reason is required" });
+    }
+
+    await connectDB();
+
+    // Verify the user exists and is pending
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.approvalStatus !== "pending") {
+      return res.status(400).json({ 
+        message: `User account is already ${user.approvalStatus}` 
+      });
+    }
+
+    // Update user approval status
+    user.approvalStatus = "rejected";
+    user.rejectionReason = rejectionReason;
+    user.approvalDate = new Date();
+    await user.save();
+
+    // Save rejection history for auditing (so re-registrations can be recognized)
+    try {
+      await RejectionHistory.create({
+        email: user.email,
+        userId: user._id,
+        reason: rejectionReason,
+        rejectedAt: new Date(),
+      });
+    } catch (histErr) {
+      console.error("Failed to save rejection history:", histErr);
+    }
+
+    // Update corresponding model approval status
+    if (user.role === "entrepreneur") {
+      await Enterprenuer.updateOne(
+        { userId: user._id },
+        { approvalStatus: "rejected" }
+      );
+    } else if (user.role === "investor") {
+      await Investor.updateOne(
+        { userId: user._id },
+        { approvalStatus: "rejected" }
+      );
+    }
+
+    // Send rejection email
+    try {
+      await sendRejectionMail(user.email, user.name, user.role, rejectionReason);
+    } catch (mailError) {
+      console.error("Mail sending error:", mailError);
+      // Don't fail the rejection if email fails, just log it
+    }
+
+    res.status(200).json({
+      message: `${user.role} account rejected successfully`,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        approvalStatus: user.approvalStatus,
+        rejectionReason: user.rejectionReason,
+        approvalDate: user.approvalDate
+      }
+    });
+  } catch (error) {
+    console.error("Error rejecting user:", error);
+    res.status(500).json({ message: "Failed to reject user", error: error.message });
+  }
+});
+
+
+adminRouter.delete("/delete-rejected-user/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    await connectDB();
+
+    // Verify the user exists and is rejected
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.approvalStatus !== "rejected") {
+      return res.status(400).json({ 
+        message: "Only rejected users can be deleted" 
+      });
+    }
+
+    // Delete user
+    await User.findByIdAndDelete(userId);
+
+    // Delete associated entrepreneur or investor record
+    if (user.role === "entrepreneur") {
+      await Enterprenuer.deleteOne({ userId: userId });
+    } else if (user.role === "investor") {
+      await Investor.deleteOne({ userId: userId });
+    }
+
+    res.status(200).json({
+      message: `${user.role} account deleted successfully`,
+      deletedUser: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error("Error deleting rejected user:", error);
+    res.status(500).json({ message: "Failed to delete user", error: error.message });
+  }
+});
+
+adminRouter.get("/user-approval-status/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    await connectDB();
+
+    const user = await User.findById(userId, "-password -twoFactorSecret -backupCodes").lean();
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({
+      userId: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      approvalStatus: user.approvalStatus,
+      rejectionReason: user.rejectionReason,
+      approvalDate: user.approvalDate,
+      createdAt: user.createdAt
+    });
+  } catch (error) {
+    console.error("Error fetching user approval status:", error);
+    res.status(500).json({ message: "Failed to fetch user approval status", error: error.message });
+  }
+});
+
+
+adminRouter.get("/approval-stats", async (req, res) => {
+  try {
+    await connectDB();
+
+    const pendingCount = await User.countDocuments({
+      $or: [{ role: "entrepreneur" }, { role: "investor" }],
+      approvalStatus: "pending"
+    });
+
+    const approvedCount = await User.countDocuments({
+      $or: [{ role: "entrepreneur" }, { role: "investor" }],
+      approvalStatus: "approved"
+    });
+
+    const rejectedCount = await User.countDocuments({
+      $or: [{ role: "entrepreneur" }, { role: "investor" }],
+      approvalStatus: "rejected"
+    });
+
+    res.status(200).json({
+      pending: pendingCount,
+      approved: approvedCount,
+      rejected: rejectedCount,
+      total: pendingCount + approvedCount + rejectedCount
+    });
+  } catch (error) {
+    console.error("Error fetching approval stats:", error);
+    res.status(500).json({ message: "Failed to fetch approval statistics", error: error.message });
+  }
+});
 
 export default adminRouter;
