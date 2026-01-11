@@ -1,250 +1,14 @@
-// import { Router } from "express";
-// import User from "../models/user.js";
-// import jwt from "jsonwebtoken";
-// import sendMailToUser from "../utils/addToMailList.js";
-// import bcrypt from "bcryptjs";
-// import { connectDB } from "../config/mongoDBConnection.js";
-// import { logRiskEvent } from "../routes/adminRouter.js";
-// const authRouter = Router();
-
-// let failed_attempts = 0;
-
-// const riskEventDetection = (email) => {
-//   failed_attempts += 1;
-//   if (failed_attempts > 1) {
-//     logRiskEvent({
-//       email,
-//       eventType: "failed_login",
-//       riskScore: 10,
-//       isFraud: false,
-//     });
-//   }
-//   if (failed_attempts > 3) {
-//     logRiskEvent({
-//       email,
-//       eventType: "multiple_time_failed_login",
-//       riskScore: 20,
-//       isFraud: failed_attempts >= 7,
-//     });
-//   }
-// };
-
-// //Resgister User
-// authRouter.post("/register", async (req, res) => {
-//   try {
-//     await connectDB();
-//     const { role, email } = req.body;
-//     if (role === "investor" || role === "entrepreneur" || role === "admin") {
-//       const filter = { role: req.body.role, email: req.body.email };
-//       const userfound = await User.findOne(filter);
-
-//       if (userfound) {
-//         riskEventDetection(email);
-//         return res.status(400).json({ message: "User already exists" });
-//       }
-//     } else {
-//       riskEventDetection(email);
-//       return res.status(400).json({ message: "This role isn't exist." });
-//     }
-
-//     const encryptedPassword = await bcrypt.hash(req.body.password, 10);
-//     const user = new User({ ...req.body, password: encryptedPassword });
-//     const userObject = user.safeDataForAuth();
-
-//     const token = jwt.sign(userObject, process.env.JWT_SECRET, {
-//       expiresIn: "1h",
-//     });
-
-//     await user.save();
-
-//     res.status(201).json({
-//       message: "user registered succssfully..",
-//       token,
-//       user: { ...userObject },
-//     });
-//   } catch (err) {
-//     console.log(err);
-//     res
-//       .status(500)
-//       .json({ message: "Failed to register a user: " + err.message });
-//   }
-// });
-
-// //Logging in..
-// authRouter.post("/login", async (req, res) => {
-//   try {
-//     await connectDB();
-//     const user = await User.findOne({ email: req.body.email }).select(
-//       "+password"
-//     );
-//     if (!user) {
-//       riskEventDetection(req.body.email);
-//       return res
-//         .status(404)
-//         .json({ message: "The user not found please register first.." });
-//     }
-
-//     const isMatch = await bcrypt.compare(req.body.password, user.password);
-//     if (!isMatch) {
-//       riskEventDetection(req.body.email);
-//       return res.status(400).json({ message: "Invalid email or password" });
-//     }
-
-//     if (user.role !== req.body.role) {
-//       return res
-//         .status(400)
-//         .json({ message: "You are trying to login in with wrong role.." });
-//     }
-
-//     const userObjectForToken = user.safeDataForAuth();
-//     const token = jwt.sign(userObjectForToken, process.env.JWT_SECRET, {
-//       expiresIn: "1h",
-//     });
-
-//     const userObj = user.afterLoggedSafeData();
-//     res.status(200).json({
-//       message: "signed in successfully..",
-//       token,
-//       user: { ...userObj },
-//     });
-//   } catch (err) {
-//     console.log(err);
-//     res
-//       .status(400)
-//       .json({ message: "bad request while signing it.." + err.message });
-//   }
-// });
-
-// authRouter.post("/login-with-oauth", async (req, res) => {
-//   try {
-//     await connectDB();
-//     const { userToken, role } = req.body;
-//     const userInfo = jwt.verify(userToken, process.env.JWT_SECRET);
-
-//     let user = await User.findOne({ email: userInfo.email });
-//     if (!user) {
-//       user = new User({
-//         name: userInfo.name,
-//         email: userInfo.email,
-//         role: role,
-//       });
-//       await user.save();
-//     } else {
-//       if (user.role !== req.body.role) {
-//         riskEventDetection(req.body.email);
-//         return res
-//           .status(400)
-//           .json({ message: "You are trying to login in with wrong role.." });
-//       }
-//     }
-
-//     const userObjectForToken = user.safeDataForAuth();
-//     const token = jwt.sign(userObjectForToken, process.env.JWT_SECRET, {
-//       expiresIn: "1h",
-//     });
-
-//     const userObj = user.afterLoggedSafeDataForOauth();
-//     res.status(200).json({
-//       message: "signed in successfully..",
-//       token,
-//       user: { ...userObj },
-//     });
-//   } catch (err) {
-//     console.error(err);
-//     res
-//       .status(400)
-//       .json({ message: "bad request while signing it.." + err.message });
-//   }
-// });
-
-// // Sending email for forgot password...
-// authRouter.post("/send-mail", async (req, res) => {
-//   const { email, message, sub } = req.body;
-
-//   try {
-//     await connectDB();
-//     const user = await User.findOne({ email });
-
-//     if (!user) {
-//       return res.status(404).json({ message: "User email is not valid" });
-//     }
-
-//     const cleanedUser = user.safeDataForAuth();
-//     const info = await sendMailToUser(email, message, sub);
-//     return res.status(200).json({
-//       success: true,
-//       message: "Email sent successfully!",
-//       info,
-//       user: cleanedUser,
-//     });
-//   } catch (error) {
-//     return res.status(500).json({
-//       success: false,
-//       message: "Failed to send email",
-//       error: error.toString(),
-//     });
-//   }
-// });
-
-// authRouter.patch("/update-password/:id", async (req, res) => {
-//   try {
-//     await connectDB();
-//     const { id } = req.params;
-//     const { newPassword } = req.body;
-
-//     const encryptedPassword = await bcrypt.hash(newPassword, 10);
-//     const user = await User.findByIdAndUpdate(id, {
-//       password: encryptedPassword,
-//     });
-
-//     const cleanedUser = user.afterLoggedSafeData();
-//     res
-//       .status(200)
-//       .json({ user: cleanedUser, message: "password updated successfully." });
-//   } catch (err) {
-//     console.log(err);
-//     res.status(500).json({ message: "Failed to password update." });
-//   }
-// });
-
-// //auth middleware
-
-// authRouter.get("/verify", (req, res) => {
-//   const authHeader = req.headers["authorization"];
-//   const token = authHeader && authHeader.split(" ")[1];
-//   if (!token) return res.status(401).json({ message: "No token provided" });
-
-//   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-//     if (err)
-//       return res.status(403).json({ message: "Invalid or expired token" });
-//     res.json({ valid: true, user: decoded });
-//   });
-// });
-
-// export default authRouter;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 import { Router } from "express";
 import User from "../models/user.js";
 import jwt from "jsonwebtoken";
 import sendMailToUser from "../utils/addToMailList.js";
+import { sendAdminNewUserNotification } from "../utils/approvalMailService.js";
 import bcrypt from "bcryptjs";
 import { connectDB } from "../config/mongoDBConnection.js";
 import { logRiskEvent } from "../routes/adminRouter.js";
 import TwoFactorAuth from "./twoFactorAuth.js";
+import Entrepreneur from "../models/enterpreneur.js";
+import Investor from "../models/investor.js";
 const authRouter = Router();
 
 let failed_attempts = 0;
@@ -272,16 +36,44 @@ const riskEventDetection = (email) => {
 
 //Resgister User
 authRouter.post("/register", async (req, res) => {
+  console.log("=== REGISTER ENDPOINT CALLED ===");
+  console.log("Request body:", { email: req.body.email, role: req.body.role });
+  
   try {
     await connectDB();
     const { role, email } = req.body;
+    console.log("Processing registration for:", email, "Role:", role);
     if (role === "investor" || role === "entrepreneur" || role === "admin") {
       const filter = { role: req.body.role, email: req.body.email };
+      console.log("Searching for user with filter:", filter);
       const userfound = await User.findOne(filter);
+      console.log("User search result:", userfound ? `Found user with status: ${userfound.approvalStatus}` : "No user found");
 
+      // If user exists and is rejected, allow re-registration (delete old account)
       if (userfound) {
-        riskEventDetection(email);
-        return res.status(400).json({ message: "User already exists" });
+        console.log("User found:", { email: userfound.email, approvalStatus: userfound.approvalStatus });
+        
+        if (userfound.approvalStatus === "rejected") {
+          console.log("User is rejected, deleting old account...");
+          
+          // Delete the rejected account
+          await User.deleteOne({ _id: userfound._id });
+          
+          // Also delete from Entrepreneur or Investor profiles
+          if (role === "entrepreneur") {
+            await Entrepreneur.deleteOne({ userId: userfound._id });
+          } else if (role === "investor") {
+            await Investor.deleteOne({ userId: userfound._id });
+          }
+          
+          console.log("Deleted rejected user, proceeding with new registration");
+          // Continue with new registration (don't return here)
+        } else {
+          // User already exists and is not rejected
+          console.log("User exists and is not rejected:", userfound.approvalStatus);
+          riskEventDetection(email);
+          return res.status(400).json({ message: "User already exists" });
+        }
       }
     } else {
       riskEventDetection(email);
@@ -298,13 +90,20 @@ authRouter.post("/register", async (req, res) => {
 
     await user.save();
 
+    // Notify admin about new registration (non-blocking)
+    try {
+      await sendAdminNewUserNotification(user.email, user.name, user.role);
+    } catch (mailErr) {
+      console.error("Failed to send admin new-user notification:", mailErr);
+    }
+
     res.status(201).json({
       message: "user registered succssfully..",
       token,
       user: { ...userObject },
     });
   } catch (err) {
-    console.log(err);
+    console.log("Register error:", err);
     res
       .status(500)
       .json({ message: "Failed to register a user: " + err.message });
@@ -360,7 +159,9 @@ authRouter.post("/register", async (req, res) => {
 authRouter.post("/login", async (req, res) => {
   try {
     await connectDB();
-    const user = await User.findOne({ email: req.body.email }).select(
+    // Find the user by both email and the selected role so users with multiple role-accounts
+    // (e.g., entrepreneur + investor) authenticate the correct profile.
+    const user = await User.findOne({ email: req.body.email, role: req.body.role }).select(
       "+password"
     );
     
@@ -381,6 +182,24 @@ authRouter.post("/login", async (req, res) => {
       return res
         .status(400)
         .json({ message: "You are trying to login in with wrong role.." });
+    }
+
+    // Check approval status for entrepreneur and investor
+    if ((user.role === "entrepreneur" || user.role === "investor") && user.approvalStatus !== "approved") {
+      if (user.approvalStatus === "rejected") {
+        return res.status(403).json({ 
+          message: "Your account has been rejected",
+          approvalStatus: "rejected",
+          reason: user.rejectionReason
+        });
+      }
+      
+      if (user.approvalStatus === "pending") {
+        return res.status(403).json({ 
+          message: "Your account is pending admin approval. Please wait for approval notification.",
+          approvalStatus: "pending"
+        });
+      }
     }
 
     // Get device info
@@ -454,7 +273,7 @@ authRouter.post("/login-with-oauth", async (req, res) => {
     const { userToken, role } = req.body;
     const userInfo = jwt.verify(userToken, process.env.JWT_SECRET);
 
-    let user = await User.findOne({ email: userInfo.email });
+    let user = await User.findOne({ email: userInfo.email, role });
     if (!user) {
       user = new User({
         name: userInfo.name,
@@ -468,6 +287,24 @@ authRouter.post("/login-with-oauth", async (req, res) => {
         return res
           .status(400)
           .json({ message: "You are trying to login in with wrong role.." });
+      }
+    }
+
+    // Check approval status for entrepreneur and investor
+    if ((user.role === "entrepreneur" || user.role === "investor") && user.approvalStatus !== "approved") {
+      if (user.approvalStatus === "rejected") {
+        return res.status(403).json({ 
+          message: "Your account has been rejected",
+          approvalStatus: "rejected",
+          reason: user.rejectionReason
+        });
+      }
+      
+      if (user.approvalStatus === "pending") {
+        return res.status(403).json({ 
+          message: "Your account is pending admin approval. Please wait for approval notification.",
+          approvalStatus: "pending"
+        });
       }
     }
 

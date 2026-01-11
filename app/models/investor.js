@@ -12,6 +12,12 @@ const investorSchema = mongoose.Schema({
   minTimline: Number,
   maxTimline: Number,
   access: { type: String, default: false },
+  // Approval Fields
+  approvalStatus: { 
+    type: String, 
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'pending'
+  },
 });
 
 const Investor = mongoose.model("Investor", investorSchema);
