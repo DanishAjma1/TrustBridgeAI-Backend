@@ -2,7 +2,10 @@ import { Router } from "express";
 import User from "../models/user.js";
 import jwt from "jsonwebtoken";
 import sendMailToUser from "../utils/addToMailList.js";
-import { sendAdminNewUserNotification } from "../utils/approvalMailService.js";
+import {
+  sendAdminNewUserNotification,
+  sendUserRegistrationNotification,
+} from "../utils/approvalMailService.js";
 import bcrypt from "bcryptjs";
 import { connectDB } from "../config/mongoDBConnection.js";
 import { logRiskEvent } from "../routes/adminRouter.js";
@@ -33,12 +36,11 @@ const riskEventDetection = (email) => {
   }
 };
 
-
 //Resgister User
 authRouter.post("/register", async (req, res) => {
   console.log("=== REGISTER ENDPOINT CALLED ===");
   console.log("Request body:", { email: req.body.email, role: req.body.role });
-  
+
   try {
     await connectDB();
     const { role, email } = req.body;
@@ -47,30 +49,43 @@ authRouter.post("/register", async (req, res) => {
       const filter = { role: req.body.role, email: req.body.email };
       console.log("Searching for user with filter:", filter);
       const userfound = await User.findOne(filter);
-      console.log("User search result:", userfound ? `Found user with status: ${userfound.approvalStatus}` : "No user found");
+      console.log(
+        "User search result:",
+        userfound
+          ? `Found user with status: ${userfound.approvalStatus}`
+          : "No user found"
+      );
 
       // If user exists and is rejected, allow re-registration (delete old account)
       if (userfound) {
-        console.log("User found:", { email: userfound.email, approvalStatus: userfound.approvalStatus });
-        
+        console.log("User found:", {
+          email: userfound.email,
+          approvalStatus: userfound.approvalStatus,
+        });
+
         if (userfound.approvalStatus === "rejected") {
           console.log("User is rejected, deleting old account...");
-          
+
           // Delete the rejected account
           await User.deleteOne({ _id: userfound._id });
-          
+
           // Also delete from Entrepreneur or Investor profiles
           if (role === "entrepreneur") {
             await Entrepreneur.deleteOne({ userId: userfound._id });
           } else if (role === "investor") {
             await Investor.deleteOne({ userId: userfound._id });
           }
-          
-          console.log("Deleted rejected user, proceeding with new registration");
+
+          console.log(
+            "Deleted rejected user, proceeding with new registration"
+          );
           // Continue with new registration (don't return here)
         } else {
           // User already exists and is not rejected
-          console.log("User exists and is not rejected:", userfound.approvalStatus);
+          console.log(
+            "User exists and is not rejected:",
+            userfound.approvalStatus
+          );
           riskEventDetection(email);
           return res.status(400).json({ message: "User already exists" });
         }
@@ -93,6 +108,7 @@ authRouter.post("/register", async (req, res) => {
     // Notify admin about new registration (non-blocking)
     try {
       await sendAdminNewUserNotification(user.email, user.name, user.role);
+      await sendUserRegistrationNotification(user.email, user.name, user.role);
     } catch (mailErr) {
       console.error("Failed to send admin new-user notification:", mailErr);
     }
@@ -161,10 +177,11 @@ authRouter.post("/login", async (req, res) => {
     await connectDB();
     // Find the user by both email and the selected role so users with multiple role-accounts
     // (e.g., entrepreneur + investor) authenticate the correct profile.
-    const user = await User.findOne({ email: req.body.email, role: req.body.role }).select(
-      "+password"
-    );
-    
+    const user = await User.findOne({
+      email: req.body.email,
+      role: req.body.role,
+    }).select("+password");
+
     if (!user) {
       riskEventDetection(req.body.email);
       return res
@@ -186,10 +203,10 @@ authRouter.post("/login", async (req, res) => {
 
     // Check if user is blocked
     if (user.isBlocked) {
-      return res.status(403).json({ 
+      return res.status(403).json({
         message: "Your account has been blocked",
         isBlocked: true,
-        blockReason: user.blockReason
+        blockReason: user.blockReason,
       });
     }
 
@@ -197,7 +214,7 @@ authRouter.post("/login", async (req, res) => {
     if (user.isSuspended) {
       const now = new Date();
       const suspensionEndDate = new Date(user.suspensionEndDate);
-      
+
       // If suspension period has ended, auto-unsuspend
       if (now > suspensionEndDate) {
         user.isSuspended = false;
@@ -208,39 +225,46 @@ authRouter.post("/login", async (req, res) => {
         await user.save();
       } else {
         // Still suspended
-        return res.status(403).json({ 
+        return res.status(403).json({
           message: "Your account has been suspended",
           isSuspended: true,
           suspensionReason: user.suspensionReason,
-          suspensionEndDate: user.suspensionEndDate
+          suspensionEndDate: user.suspensionEndDate,
         });
       }
     }
 
     // Check approval status for entrepreneur and investor
-    if ((user.role === "entrepreneur" || user.role === "investor") && user.approvalStatus !== "approved") {
+    if (
+      (user.role === "entrepreneur" || user.role === "investor") &&
+      user.approvalStatus !== "approved"
+    ) {
       if (user.approvalStatus === "rejected") {
-        return res.status(403).json({ 
+        return res.status(403).json({
           message: "Your account has been rejected",
           approvalStatus: "rejected",
-          reason: user.rejectionReason
+          reason: user.rejectionReason,
         });
       }
-      
+
       if (user.approvalStatus === "pending") {
-        return res.status(403).json({ 
-          message: "Your account is pending admin approval. Please wait for approval notification.",
-          approvalStatus: "pending"
+        return res.status(403).json({
+          message:
+            "Your account is pending admin approval. Please wait for approval notification.",
+          approvalStatus: "pending",
         });
       }
     }
 
     // Get device info
     const deviceInfo = TwoFactorAuth.getDeviceInfo(req);
-    
+
     // Check if 2FA is required for this device
-    const requires2FA = await TwoFactorAuth.is2FARequired(user._id, deviceInfo.deviceId);
-    
+    const requires2FA = await TwoFactorAuth.is2FARequired(
+      user._id,
+      deviceInfo.deviceId
+    );
+
     if (user.twoFactorEnabled && requires2FA) {
       // Return partial token for 2FA verification
       const partialToken = jwt.sign(
@@ -248,12 +272,12 @@ authRouter.post("/login", async (req, res) => {
           userId: user._id,
           email: user.email,
           requires2FA: true,
-          deviceInfo: deviceInfo
+          deviceInfo: deviceInfo,
         },
         process.env.JWT_SECRET,
-        { expiresIn: '10m' } // Short expiry for 2FA token
+        { expiresIn: "10m" } // Short expiry for 2FA token
       );
-      
+
       return res.status(200).json({
         message: "2FA required",
         requires2FA: true,
@@ -263,19 +287,19 @@ authRouter.post("/login", async (req, res) => {
           email: user.email,
           name: user.name,
           role: user.role,
-          twoFactorEnabled: true
-        }
+          twoFactorEnabled: true,
+        },
       });
     }
 
     // If no 2FA required, generate full token
     const userObjectForToken = user.safeDataForAuth();
     const token = jwt.sign(
-      { 
+      {
         ...userObjectForToken,
-        deviceId: deviceInfo.deviceId 
-      }, 
-      process.env.JWT_SECRET, 
+        deviceId: deviceInfo.deviceId,
+      },
+      process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
@@ -290,7 +314,7 @@ authRouter.post("/login", async (req, res) => {
       message: "signed in successfully..",
       token,
       user: { ...userObj },
-      deviceTrusted: !requires2FA
+      deviceTrusted: !requires2FA,
     });
   } catch (err) {
     console.log(err);
@@ -325,10 +349,10 @@ authRouter.post("/login-with-oauth", async (req, res) => {
 
     // Check if user is blocked
     if (user.isBlocked) {
-      return res.status(403).json({ 
+      return res.status(403).json({
         message: "Your account has been blocked",
         isBlocked: true,
-        blockReason: user.blockReason
+        blockReason: user.blockReason,
       });
     }
 
@@ -336,7 +360,7 @@ authRouter.post("/login-with-oauth", async (req, res) => {
     if (user.isSuspended) {
       const now = new Date();
       const suspensionEndDate = new Date(user.suspensionEndDate);
-      
+
       // If suspension period has ended, auto-unsuspend
       if (now > suspensionEndDate) {
         user.isSuspended = false;
@@ -347,29 +371,33 @@ authRouter.post("/login-with-oauth", async (req, res) => {
         await user.save();
       } else {
         // Still suspended
-        return res.status(403).json({ 
+        return res.status(403).json({
           message: "Your account has been suspended",
           isSuspended: true,
           suspensionReason: user.suspensionReason,
-          suspensionEndDate: user.suspensionEndDate
+          suspensionEndDate: user.suspensionEndDate,
         });
       }
     }
 
     // Check approval status for entrepreneur and investor
-    if ((user.role === "entrepreneur" || user.role === "investor") && user.approvalStatus !== "approved") {
+    if (
+      (user.role === "entrepreneur" || user.role === "investor") &&
+      user.approvalStatus !== "approved"
+    ) {
       if (user.approvalStatus === "rejected") {
-        return res.status(403).json({ 
+        return res.status(403).json({
           message: "Your account has been rejected",
           approvalStatus: "rejected",
-          reason: user.rejectionReason
+          reason: user.rejectionReason,
         });
       }
-      
+
       if (user.approvalStatus === "pending") {
-        return res.status(403).json({ 
-          message: "Your account is pending admin approval. Please wait for approval notification.",
-          approvalStatus: "pending"
+        return res.status(403).json({
+          message:
+            "Your account is pending admin approval. Please wait for approval notification.",
+          approvalStatus: "pending",
         });
       }
     }
@@ -457,69 +485,74 @@ authRouter.get("/verify", (req, res) => {
   });
 });
 
-
 // New endpoint for 2FA verification
 authRouter.post("/verify-2fa", async (req, res) => {
   try {
     const { partialToken, code, useBackupCode = false } = req.body;
-    
+
     // Verify partial token
     const decoded = jwt.verify(partialToken, process.env.JWT_SECRET);
-    
+
     if (!decoded.requires2FA) {
-      return res.status(400).json({ message: "Invalid token for 2FA verification" });
+      return res
+        .status(400)
+        .json({ message: "Invalid token for 2FA verification" });
     }
-    
+
     let verified = false;
-    
+
     if (useBackupCode) {
       // Verify backup code
       verified = await TwoFactorAuth.verifyBackupCode(decoded.userId, code);
     } else {
       // Verify 2FA code
       verified = await TwoFactorAuth.verifyToken(
-        decoded.userId, 
-        code, 
+        decoded.userId,
+        code,
         decoded.deviceInfo
       );
     }
-    
+
     if (!verified) {
       return res.status(400).json({ message: "Invalid verification code" });
     }
-    
+
     // Get user
     await connectDB();
     const user = await User.findById(decoded.userId);
-    
+
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
-    
+
     // Generate full token
     const userObjectForToken = user.safeDataForAuth();
     const token = jwt.sign(
-      { 
+      {
         ...userObjectForToken,
-        deviceId: decoded.deviceInfo.deviceId 
-      }, 
-      process.env.JWT_SECRET, 
+        deviceId: decoded.deviceInfo.deviceId,
+      },
+      process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
-    
+
     const userObj = user.afterLoggedSafeData();
     res.status(200).json({
       message: "2FA verification successful",
       token,
       user: { ...userObj },
-      deviceTrusted: true
+      deviceTrusted: true,
     });
   } catch (err) {
     console.error(err);
-    if (err.name === 'TokenExpiredError') {
-      return res.status(400).json({ message: "Verification session expired. Please login again." });
+    if (err.name === "TokenExpiredError") {
+      return res
+        .status(400)
+        .json({ message: "Verification session expired. Please login again." });
     }
-    res.status(400).json({ message: "2FA verification failed: " + err.message });
+    res
+      .status(400)
+      .json({ message: "2FA verification failed: " + err.message });
   }
 });
 
@@ -527,18 +560,18 @@ authRouter.post("/verify-2fa", async (req, res) => {
 authRouter.post("/setup-2fa", async (req, res) => {
   try {
     const { userId } = req.body;
-    
+
     if (!userId) {
       return res.status(400).json({ message: "User ID is required" });
     }
-    
+
     const secretData = await TwoFactorAuth.generateSecret(userId);
-    
+
     res.status(200).json({
       message: "2FA setup initiated",
       secret: secretData.secret,
       qrCodeUrl: secretData.qrCodeUrl,
-      otpauth_url: secretData.otpauth_url
+      otpauth_url: secretData.otpauth_url,
     });
   } catch (err) {
     console.error(err);
@@ -550,16 +583,16 @@ authRouter.post("/setup-2fa", async (req, res) => {
 authRouter.post("/enable-2fa", async (req, res) => {
   try {
     const { userId, secret, code } = req.body;
-    
+
     if (!userId || !secret || !code) {
       return res.status(400).json({ message: "Missing required fields" });
     }
-    
+
     const backupCodes = await TwoFactorAuth.enable2FA(userId, secret, code);
-    
+
     res.status(200).json({
       message: "2FA enabled successfully",
-      backupCodes
+      backupCodes,
     });
   } catch (err) {
     console.error(err);
@@ -571,15 +604,15 @@ authRouter.post("/enable-2fa", async (req, res) => {
 authRouter.post("/disable-2fa", async (req, res) => {
   try {
     const { userId } = req.body;
-    
+
     if (!userId) {
       return res.status(400).json({ message: "User ID is required" });
     }
-    
+
     await TwoFactorAuth.disable2FA(userId);
-    
+
     res.status(200).json({
-      message: "2FA disabled successfully"
+      message: "2FA disabled successfully",
     });
   } catch (err) {
     console.error(err);
@@ -591,17 +624,17 @@ authRouter.post("/disable-2fa", async (req, res) => {
 authRouter.get("/trusted-devices/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
-    
+
     await connectDB();
     const user = await User.findById(userId);
-    
+
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
-    
+
     res.status(200).json({
       trustedDevices: user.trustedDevices || [],
-      securitySettings: user.securitySettings
+      securitySettings: user.securitySettings,
     });
   } catch (err) {
     console.error(err);
@@ -613,11 +646,11 @@ authRouter.get("/trusted-devices/:userId", async (req, res) => {
 authRouter.delete("/trusted-devices/:userId/:deviceId", async (req, res) => {
   try {
     const { userId, deviceId } = req.params;
-    
+
     await TwoFactorAuth.removeTrustedDevice(userId, deviceId);
-    
+
     res.status(200).json({
-      message: "Trusted device removed successfully"
+      message: "Trusted device removed successfully",
     });
   } catch (err) {
     console.error(err);
@@ -628,11 +661,11 @@ authRouter.delete("/trusted-devices/:userId/:deviceId", async (req, res) => {
 authRouter.delete("/trusted-devices/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
-    
+
     await TwoFactorAuth.clearAllTrustedDevices(userId);
-    
+
     res.status(200).json({
-      message: "All trusted devices removed successfully"
+      message: "All trusted devices removed successfully",
     });
   } catch (err) {
     console.error(err);
@@ -645,24 +678,24 @@ authRouter.patch("/security-settings/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
     const { securitySettings } = req.body;
-    
+
     await connectDB();
     const user = await User.findById(userId);
-    
+
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
-    
+
     user.securitySettings = {
       ...user.securitySettings,
-      ...securitySettings
+      ...securitySettings,
     };
-    
+
     await user.save();
-    
+
     res.status(200).json({
       message: "Security settings updated successfully",
-      securitySettings: user.securitySettings
+      securitySettings: user.securitySettings,
     });
   } catch (err) {
     console.error(err);

@@ -305,3 +305,69 @@ export const sendAdminNewUserNotification = (userEmail, userName, role) => {
     });
   });
 };
+
+// Notify user that their registration is successful and under review
+export const sendUserRegistrationNotification = (email, userName, role) => {
+  return new Promise((resolve, reject) => {
+    const htmlMessage = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        ${getProtectedLogoHTML("small")}
+        
+        <div style="background-color: #f0f9ff; padding: 25px; border-radius: 8px; border-left: 4px solid #3182ce;">
+          <h2 style="color: #2c5282; margin-bottom: 20px; text-align: center;">Registration Successful! 🚀</h2>
+          
+          <div style="background-color: white; padding: 25px; border-radius: 6px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+            <p style="color: #4a5568; font-size: 16px; line-height: 1.6;">
+              Dear <strong style="color: #2d3748;">${userName}</strong>,
+            </p>
+            
+            <p style="color: #4a5568; font-size: 16px; line-height: 1.6;">
+              Thank you for registering with TrustBridge AI as ${role}. We have received your application.
+            </p>
+            
+            <div style="background-color: #ebf8ff; padding: 15px; border-radius: 6px; margin: 20px 0;">
+              <p style="color: #2c5282; margin: 0; font-weight: bold; font-size: 15px;">
+                Status: <span style="color: #d69e2e;">Under Review</span>
+              </p>
+              <p style="color: #4a5568; font-size: 14px; margin-top: 5px;">
+                Our admin team reviews all new accounts to ensure the quality and security of our platform.
+              </p>
+            </div>
+            
+            <p style="color: #4a5568; font-size: 15px; line-height: 1.6;">
+              You will receive another email once your account has been approved or if we need more information. This typically takes 24-48 hours.
+            </p>
+          </div>
+          
+          <p style="color: #718096; font-size: 13px; text-align: center;">
+            If you have any questions, please contact <a href="mailto:support@trustbridge.ai" style="color: #4299e1;">support@trustbridge.ai</a>.
+          </p>
+        </div>
+        
+        <div style="text-align: center; color: #718096; font-size: 12px; margin-top: 25px;">
+            <p>TrustBridge AI<br>
+            <p style="font-size: 11px; margin-top: 5px;">
+              © ${new Date().getFullYear()} TrustBridge AI. All rights reserved.
+            </p>
+        </div>
+      </div>
+    `;
+
+    const mailOptions = {
+      from: "TrustBridge AI <" + process.env.USER_EMAIL + ">",
+      to: email,
+      subject: "Registration Successful - Account Under Review",
+      html: htmlMessage,
+    };
+
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        console.log("User welcome email error:", error);
+        reject(error);
+      } else {
+        console.log("User welcome email sent:", info.response);
+        resolve(info);
+      }
+    });
+  });
+};
