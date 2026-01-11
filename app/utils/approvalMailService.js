@@ -15,13 +15,15 @@ const LOGO_URL = process.env.LOGO_URL || "https://yourdomain.com/logo.png";
 
 // Helper function to generate protected logo HTML with white background
 const getProtectedLogoHTML = (size = "large") => {
-   const width = size === "small" ? "200px" : "300px";  
-  const height = size === "small" ? "80px" : "100px"; 
+  const width = size === "small" ? "200px" : "300px";
+  const height = size === "small" ? "80px" : "100px";
   const marginBottom = size === "small" ? "10px" : "15px";
-  
+
   return `
     <!-- Protected Logo Section - CSS Background Method with White Background -->
-    <div style="text-align: center; margin-bottom: ${size === 'small' ?'30px' : '35px'};">
+    <div style="text-align: center; margin-bottom: ${
+      size === "small" ? "30px" : "35px"
+    };">
       <div style="
         width: ${width};
         height: ${height};
@@ -39,9 +41,10 @@ const getProtectedLogoHTML = (size = "large") => {
         pointer-events: none;
         box-shadow: 0 1px 3px rgba(0,0,0,0.05);
       "></div>
-      ${size === 'small' 
-        ? '<h2 style="color: #2d3748; margin-top: 10px; margin-bottom: 0;">TrustBridge AI</h2>'
-        : '<h1 style="color: #2d3748; margin-top: 15px; margin-bottom: 5px;">TrustBridge AI</h1><p style="color: #718096; font-size: 14px; margin-top: 0;">Building Trust in AI</p>'
+      ${
+        size === "small"
+          ? '<h2 style="color: #2d3748; margin-top: 10px; margin-bottom: 0;">TrustBridge AI</h2>'
+          : '<h1 style="color: #2d3748; margin-top: 15px; margin-bottom: 5px;">TrustBridge AI</h1><p style="color: #718096; font-size: 14px; margin-top: 0;">Building Trust in AI</p>'
       }
     </div>
   `;
@@ -50,7 +53,7 @@ const getProtectedLogoHTML = (size = "large") => {
 export const sendApprovalMail = (email, userName, role, approvalToken) => {
   return new Promise((resolve, reject) => {
     const approvalLink = `${process.env.FRONTEND_URL}/login`;
-    
+
     const htmlMessage = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background-color: #f0f4f8; padding: 20px; border-radius: 8px;">
@@ -217,7 +220,7 @@ export const sendAdminNewUserNotification = (userEmail, userName, role) => {
   return new Promise((resolve, reject) => {
     const adminEmail = process.env.ADMIN_EMAIL || "aitrustbridge@gmail.com";
     const approvalLink = `${process.env.FRONTEND_URL}/login`;
-    
+
     const htmlMessage = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         ${getProtectedLogoHTML("small")}

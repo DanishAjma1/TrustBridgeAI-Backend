@@ -184,6 +184,39 @@ authRouter.post("/login", async (req, res) => {
         .json({ message: "You are trying to login in with wrong role.." });
     }
 
+    // Check if user is blocked
+    if (user.isBlocked) {
+      return res.status(403).json({ 
+        message: "Your account has been blocked",
+        isBlocked: true,
+        blockReason: user.blockReason
+      });
+    }
+
+    // Check if user is suspended
+    if (user.isSuspended) {
+      const now = new Date();
+      const suspensionEndDate = new Date(user.suspensionEndDate);
+      
+      // If suspension period has ended, auto-unsuspend
+      if (now > suspensionEndDate) {
+        user.isSuspended = false;
+        user.suspensionReason = undefined;
+        user.suspensionStartDate = undefined;
+        user.suspensionEndDate = undefined;
+        user.suspendedBy = undefined;
+        await user.save();
+      } else {
+        // Still suspended
+        return res.status(403).json({ 
+          message: "Your account has been suspended",
+          isSuspended: true,
+          suspensionReason: user.suspensionReason,
+          suspensionEndDate: user.suspensionEndDate
+        });
+      }
+    }
+
     // Check approval status for entrepreneur and investor
     if ((user.role === "entrepreneur" || user.role === "investor") && user.approvalStatus !== "approved") {
       if (user.approvalStatus === "rejected") {
@@ -287,6 +320,39 @@ authRouter.post("/login-with-oauth", async (req, res) => {
         return res
           .status(400)
           .json({ message: "You are trying to login in with wrong role.." });
+      }
+    }
+
+    // Check if user is blocked
+    if (user.isBlocked) {
+      return res.status(403).json({ 
+        message: "Your account has been blocked",
+        isBlocked: true,
+        blockReason: user.blockReason
+      });
+    }
+
+    // Check if user is suspended
+    if (user.isSuspended) {
+      const now = new Date();
+      const suspensionEndDate = new Date(user.suspensionEndDate);
+      
+      // If suspension period has ended, auto-unsuspend
+      if (now > suspensionEndDate) {
+        user.isSuspended = false;
+        user.suspensionReason = undefined;
+        user.suspensionStartDate = undefined;
+        user.suspensionEndDate = undefined;
+        user.suspendedBy = undefined;
+        await user.save();
+      } else {
+        // Still suspended
+        return res.status(403).json({ 
+          message: "Your account has been suspended",
+          isSuspended: true,
+          suspensionReason: user.suspensionReason,
+          suspensionEndDate: user.suspensionEndDate
+        });
       }
     }
 

@@ -10,7 +10,16 @@ import fs from "fs";
 import User from "../models/user.js";
 import RejectionHistory from "../models/rejectionHistory.js";
 import RiskEvent from "../models/riskEvent.js";
-import { sendApprovalMail, sendRejectionMail } from "../utils/approvalMailService.js";
+import {
+  sendApprovalMail,
+  sendRejectionMail,
+} from "../utils/approvalMailService.js";
+import {
+  sendSuspensionMail,
+  sendBlockMail,
+  sendUnblockMail,
+  sendUnsuspendMail,
+} from "../utils/suspensionBlockMailService.js";
 import jwt from "jsonwebtoken";
 const uploadDir = "uploads";
 
@@ -25,6 +34,21 @@ const storage = multer.diskStorage({
   },
 });
 const upload = multer({ storage });
+
+const getAdminInfo = (req) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return { name: "zain", email: "admin@trustbridge.ai" };
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    return {
+      name: decoded.name || "Admin Team",
+      email: decoded.email || "admin@trustbridge.ai",
+    };
+  } catch (error) {
+    return { name: "Admin Team", email: "admin@trustbridge.ai" };
+  }
+};
 
 adminRouter.get("/dashboard", async (req, res) => {
   try {
@@ -341,29 +365,38 @@ export const logRiskEvent = async ({
   }
 };
 
-
 adminRouter.get("/pending-approvals", async (req, res) => {
   try {
     await connectDB();
-    
+
     // Get pending entrepreneurs
-    const pendingEntrepreneurs = await User.find({
-      role: "entrepreneur",
-      approvalStatus: "pending"
-    }, "-password -twoFactorSecret -backupCodes").lean();
+    const pendingEntrepreneurs = await User.find(
+      {
+        role: "entrepreneur",
+        approvalStatus: "pending",
+      },
+      "-password -twoFactorSecret -backupCodes"
+    ).lean();
 
     // Get pending investors
-    const pendingInvestors = await User.find({
-      role: "investor",
-      approvalStatus: "pending"
-    }, "-password -twoFactorSecret -backupCodes").lean();
+    const pendingInvestors = await User.find(
+      {
+        role: "investor",
+        approvalStatus: "pending",
+      },
+      "-password -twoFactorSecret -backupCodes"
+    ).lean();
 
     // Get entrepreneur details for pending users
     const entrepreneurDetails = await Promise.all(
       pendingEntrepreneurs.map(async (user) => {
-        const entrepreneur = await Enterprenuer.findOne({ userId: user._id }).lean();
+        const entrepreneur = await Enterprenuer.findOne({
+          userId: user._id,
+        }).lean();
         // Check if this email was previously rejected
-        const prev = await RejectionHistory.findOne({ email: user.email }).sort({ rejectedAt: -1 }).lean();
+        const prev = await RejectionHistory.findOne({ email: user.email })
+          .sort({ rejectedAt: -1 })
+          .lean();
         return {
           ...user,
           details: entrepreneur,
@@ -378,7 +411,9 @@ adminRouter.get("/pending-approvals", async (req, res) => {
     const investorDetails = await Promise.all(
       pendingInvestors.map(async (user) => {
         const investor = await Investor.findOne({ userId: user._id }).lean();
-        const prev = await RejectionHistory.findOne({ email: user.email }).sort({ rejectedAt: -1 }).lean();
+        const prev = await RejectionHistory.findOne({ email: user.email })
+          .sort({ rejectedAt: -1 })
+          .lean();
         return {
           ...user,
           details: investor,
@@ -392,51 +427,63 @@ adminRouter.get("/pending-approvals", async (req, res) => {
     res.status(200).json({
       entrepreneurs: entrepreneurDetails,
       investors: investorDetails,
-      totalPending: pendingEntrepreneurs.length + pendingInvestors.length
+      totalPending: pendingEntrepreneurs.length + pendingInvestors.length,
     });
   } catch (error) {
     console.error("Error fetching pending approvals:", error);
-    res.status(500).json({ message: "Failed to fetch pending approvals", error: error.message });
+    res.status(500).json({
+      message: "Failed to fetch pending approvals",
+      error: error.message,
+    });
   }
 });
-
 
 adminRouter.get("/approved-users", async (req, res) => {
   try {
     await connectDB();
-    
-    const approvedUsers = await User.find({
-      $or: [{ role: "entrepreneur" }, { role: "investor" }],
-      approvalStatus: "approved"
-    }, "-password -twoFactorSecret -backupCodes").lean();
+
+    const approvedUsers = await User.find(
+      {
+        $or: [{ role: "entrepreneur" }, { role: "investor" }],
+        approvalStatus: "approved",
+      },
+      "-password -twoFactorSecret -backupCodes"
+    ).lean();
 
     res.status(200).json({
       users: approvedUsers,
-      total: approvedUsers.length
+      total: approvedUsers.length,
     });
   } catch (error) {
     console.error("Error fetching approved users:", error);
-    res.status(500).json({ message: "Failed to fetch approved users", error: error.message });
+    res.status(500).json({
+      message: "Failed to fetch approved users",
+      error: error.message,
+    });
   }
 });
-
 
 adminRouter.get("/rejected-users", async (req, res) => {
   try {
     await connectDB();
-    
-    const rejectedUsers = await User.find({
-      $or: [{ role: "entrepreneur" }, { role: "investor" }],
-      approvalStatus: "rejected"
-    }, "-password -twoFactorSecret -backupCodes")
-    .select("_id name email role approvalStatus rejectionReason approvalDate createdAt") // Explicitly select fields
-    .lean();
+
+    const rejectedUsers = await User.find(
+      {
+        $or: [{ role: "entrepreneur" }, { role: "investor" }],
+        approvalStatus: "rejected",
+      },
+      "-password -twoFactorSecret -backupCodes"
+    )
+      .select(
+        "_id name email role approvalStatus rejectionReason approvalDate createdAt"
+      ) // Explicitly select fields
+      .lean();
 
     // For each rejected user, get their detailed profile (entrepreneur/investor)
     const usersWithDetails = await Promise.all(
       rejectedUsers.map(async (user) => {
         let details = null;
-        
+
         if (user.role === "entrepreneur") {
           details = await Enterprenuer.findOne({ userId: user._id }).lean();
         } else if (user.role === "investor") {
@@ -448,24 +495,26 @@ adminRouter.get("/rejected-users", async (req, res) => {
           details: {
             ...details,
             rejectionReason: user.rejectionReason, // Add rejectionReason to details
-            rejectedAt: user.approvalDate // Add rejection date as rejectedAt
+            rejectedAt: user.approvalDate, // Add rejection date as rejectedAt
           },
           // Also keep at root level for backward compatibility
-          rejectionReason: user.rejectionReason
+          rejectionReason: user.rejectionReason,
         };
       })
     );
 
     res.status(200).json({
       users: usersWithDetails,
-      total: usersWithDetails.length
+      total: usersWithDetails.length,
     });
   } catch (error) {
     console.error("Error fetching rejected users:", error);
-    res.status(500).json({ message: "Failed to fetch rejected users", error: error.message });
+    res.status(500).json({
+      message: "Failed to fetch rejected users",
+      error: error.message,
+    });
   }
 });
-
 
 adminRouter.post("/approve-user/:userId", async (req, res) => {
   try {
@@ -481,8 +530,8 @@ adminRouter.post("/approve-user/:userId", async (req, res) => {
     }
 
     if (user.approvalStatus !== "pending") {
-      return res.status(400).json({ 
-        message: `User account is already ${user.approvalStatus}` 
+      return res.status(400).json({
+        message: `User account is already ${user.approvalStatus}`,
       });
     }
 
@@ -503,7 +552,7 @@ adminRouter.post("/approve-user/:userId", async (req, res) => {
         userId: user._id,
         email: user.email,
         role: user.role,
-        approvalStatus: "approved"
+        approvalStatus: "approved",
       },
       process.env.JWT_SECRET,
       { expiresIn: "1h" }
@@ -543,15 +592,16 @@ adminRouter.post("/approve-user/:userId", async (req, res) => {
         email: user.email,
         role: user.role,
         approvalStatus: user.approvalStatus,
-        approvalDate: user.approvalDate
-      }
+        approvalDate: user.approvalDate,
+      },
     });
   } catch (error) {
     console.error("Error approving user:", error);
-    res.status(500).json({ message: "Failed to approve user", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to approve user", error: error.message });
   }
 });
-
 
 adminRouter.post("/reject-user/:userId", async (req, res) => {
   try {
@@ -571,8 +621,8 @@ adminRouter.post("/reject-user/:userId", async (req, res) => {
     }
 
     if (user.approvalStatus !== "pending") {
-      return res.status(400).json({ 
-        message: `User account is already ${user.approvalStatus}` 
+      return res.status(400).json({
+        message: `User account is already ${user.approvalStatus}`,
       });
     }
 
@@ -609,7 +659,12 @@ adminRouter.post("/reject-user/:userId", async (req, res) => {
 
     // Send rejection email
     try {
-      await sendRejectionMail(user.email, user.name, user.role, rejectionReason);
+      await sendRejectionMail(
+        user.email,
+        user.name,
+        user.role,
+        rejectionReason
+      );
     } catch (mailError) {
       console.error("Mail sending error:", mailError);
       // Don't fail the rejection if email fails, just log it
@@ -624,15 +679,16 @@ adminRouter.post("/reject-user/:userId", async (req, res) => {
         role: user.role,
         approvalStatus: user.approvalStatus,
         rejectionReason: user.rejectionReason,
-        approvalDate: user.approvalDate
-      }
+        approvalDate: user.approvalDate,
+      },
     });
   } catch (error) {
     console.error("Error rejecting user:", error);
-    res.status(500).json({ message: "Failed to reject user", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to reject user", error: error.message });
   }
 });
-
 
 adminRouter.delete("/delete-rejected-user/:userId", async (req, res) => {
   try {
@@ -647,8 +703,8 @@ adminRouter.delete("/delete-rejected-user/:userId", async (req, res) => {
     }
 
     if (user.approvalStatus !== "rejected") {
-      return res.status(400).json({ 
-        message: "Only rejected users can be deleted" 
+      return res.status(400).json({
+        message: "Only rejected users can be deleted",
       });
     }
 
@@ -668,12 +724,14 @@ adminRouter.delete("/delete-rejected-user/:userId", async (req, res) => {
         _id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role
-      }
+        role: user.role,
+      },
     });
   } catch (error) {
     console.error("Error deleting rejected user:", error);
-    res.status(500).json({ message: "Failed to delete user", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to delete user", error: error.message });
   }
 });
 
@@ -683,7 +741,10 @@ adminRouter.get("/user-approval-status/:userId", async (req, res) => {
 
     await connectDB();
 
-    const user = await User.findById(userId, "-password -twoFactorSecret -backupCodes").lean();
+    const user = await User.findById(
+      userId,
+      "-password -twoFactorSecret -backupCodes"
+    ).lean();
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -697,14 +758,16 @@ adminRouter.get("/user-approval-status/:userId", async (req, res) => {
       approvalStatus: user.approvalStatus,
       rejectionReason: user.rejectionReason,
       approvalDate: user.approvalDate,
-      createdAt: user.createdAt
+      createdAt: user.createdAt,
     });
   } catch (error) {
     console.error("Error fetching user approval status:", error);
-    res.status(500).json({ message: "Failed to fetch user approval status", error: error.message });
+    res.status(500).json({
+      message: "Failed to fetch user approval status",
+      error: error.message,
+    });
   }
 });
-
 
 adminRouter.get("/approval-stats", async (req, res) => {
   try {
@@ -712,28 +775,315 @@ adminRouter.get("/approval-stats", async (req, res) => {
 
     const pendingCount = await User.countDocuments({
       $or: [{ role: "entrepreneur" }, { role: "investor" }],
-      approvalStatus: "pending"
+      approvalStatus: "pending",
     });
 
     const approvedCount = await User.countDocuments({
       $or: [{ role: "entrepreneur" }, { role: "investor" }],
-      approvalStatus: "approved"
+      approvalStatus: "approved",
     });
 
     const rejectedCount = await User.countDocuments({
       $or: [{ role: "entrepreneur" }, { role: "investor" }],
-      approvalStatus: "rejected"
+      approvalStatus: "rejected",
     });
 
     res.status(200).json({
       pending: pendingCount,
       approved: approvedCount,
       rejected: rejectedCount,
-      total: pendingCount + approvedCount + rejectedCount
+      total: pendingCount + approvedCount + rejectedCount,
     });
   } catch (error) {
     console.error("Error fetching approval stats:", error);
-    res.status(500).json({ message: "Failed to fetch approval statistics", error: error.message });
+    res.status(500).json({
+      message: "Failed to fetch approval statistics",
+      error: error.message,
+    });
+  }
+});
+
+// =====================
+//  SUSPEND/BLOCK USER ROUTES
+// =====================
+
+// Suspend user
+adminRouter.post("/suspend-user/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { reason, suspensionDays } = req.body;
+    const token = req.headers.authorization?.split(" ")[1];
+
+    if (!reason || !suspensionDays) {
+      return res
+        .status(400)
+        .json({ message: "Suspension reason and days are required" });
+    }
+
+    await connectDB();
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.role === "admin") {
+      return res.status(400).json({ message: "Cannot suspend admin user" });
+    }
+
+    // Get admin info if token provided
+    let adminId = null;
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        adminId = decoded.userId || decoded._id;
+      } catch (err) {
+        console.log("Could not decode admin token");
+      }
+    }
+
+    const suspensionEndDate = new Date();
+    suspensionEndDate.setDate(
+      suspensionEndDate.getDate() + parseInt(suspensionDays)
+    );
+
+    user.isSuspended = true;
+    user.suspensionReason = reason;
+    user.suspensionStartDate = new Date();
+    user.suspensionEndDate = suspensionEndDate;
+    user.suspendedBy = adminId;
+    await user.save();
+    await sendSuspensionMail(user.email, user.name, reason, suspensionDays);
+    res.status(200).json({
+      message: "User suspended successfully",
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        isSuspended: user.isSuspended,
+        suspensionReason: user.suspensionReason,
+        suspensionEndDate: user.suspensionEndDate,
+      },
+    });
+  } catch (error) {
+    console.error("Error suspending user:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to suspend user", error: error.message });
+  }
+});
+
+// Block user
+adminRouter.post("/block-user/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { reason } = req.body;
+    const token = req.headers.authorization?.split(" ")[1];
+
+    if (!reason || reason.trim() === "") {
+      return res.status(400).json({ message: "Block reason is required" });
+    }
+
+    await connectDB();
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.role === "admin") {
+      return res.status(400).json({ message: "Cannot block admin user" });
+    }
+
+    // Get admin info if token provided
+    let adminId = null;
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        adminId = decoded.userId || decoded._id;
+      } catch (err) {
+        console.log("Could not decode admin token");
+      }
+    }
+
+    user.isBlocked = true;
+    user.blockReason = reason;
+    user.blockedAt = new Date();
+    user.blockedBy = adminId;
+    // Also remove suspension if blocked
+    user.isSuspended = false;
+    await user.save();
+    await sendBlockMail(user.email, user.name, reason);
+    res.status(200).json({
+      message: "User blocked successfully",
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        isBlocked: user.isBlocked,
+        blockReason: user.blockReason,
+      },
+    });
+  } catch (error) {
+    console.error("Error blocking user:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to block user", error: error.message });
+  }
+});
+
+// Unsuspend user
+adminRouter.post("/unsuspend-user/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const adminInfo = getAdminInfo(req);
+    await connectDB();
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    user.isSuspended = false;
+    user.suspensionReason = undefined;
+    user.suspensionStartDate = undefined;
+    user.suspensionEndDate = undefined;
+    user.suspendedBy = undefined;
+    await user.save();
+
+   
+    await sendUnsuspendMail(user.email, user.name, adminInfo.name);
+    res.status(200).json({
+      message: "User unsuspended successfully",
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        isSuspended: user.isSuspended,
+      },
+    });
+  } catch (error) {
+    console.error("Error unsuspending user:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to unsuspend user", error: error.message });
+  }
+});
+
+// Unblock user
+adminRouter.post("/unblock-user/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const adminInfo = getAdminInfo(req);
+    await connectDB();
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    user.isBlocked = false;
+    user.blockReason = undefined;
+    user.blockedAt = undefined;
+    user.blockedBy = undefined;
+    await user.save();
+   
+     await sendUnblockMail(user.email, user.name, adminInfo.name);
+    res.status(200).json({
+      message: "User unblocked successfully",
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        isBlocked: user.isBlocked,
+      },
+    });
+  } catch (error) {
+    console.error("Error unblocking user:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to unblock user", error: error.message });
+  }
+});
+
+// Get suspended and blocked users
+adminRouter.get("/suspended-blocked-users", async (req, res) => {
+  try {
+    await connectDB();
+
+    const suspendedUsers = await User.find(
+      {
+        isSuspended: true,
+      },
+      "-password -twoFactorSecret -backupCodes"
+    )
+      .populate("suspendedBy", "name email")
+      .lean();
+
+    const blockedUsers = await User.find(
+      {
+        isBlocked: true,
+      },
+      "-password -twoFactorSecret -backupCodes"
+    )
+      .populate("blockedBy", "name email")
+      .lean();
+
+    res.status(200).json({
+      suspended: suspendedUsers,
+      blocked: blockedUsers,
+      totalSuspended: suspendedUsers.length,
+      totalBlocked: blockedUsers.length,
+    });
+  } catch (error) {
+    console.error("Error fetching suspended/blocked users:", error);
+    res.status(500).json({
+      message: "Failed to fetch suspended/blocked users",
+      error: error.message,
+    });
+  }
+});
+
+// Delete suspended/blocked user
+adminRouter.delete("/delete-user/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    await connectDB();
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.role === "admin") {
+      return res.status(400).json({ message: "Cannot delete admin user" });
+    }
+
+    // Delete user
+    await User.findByIdAndDelete(userId);
+
+    // Delete associated entrepreneur or investor record
+    if (user.role === "entrepreneur") {
+      await Enterprenuer.deleteOne({ userId: userId });
+    } else if (user.role === "investor") {
+      await Investor.deleteOne({ userId: userId });
+    }
+
+    res.status(200).json({
+      message: "User deleted successfully",
+      deletedUser: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    console.error("Error deleting user:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to delete user", error: error.message });
   }
 });
 

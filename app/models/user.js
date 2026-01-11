@@ -51,6 +51,19 @@ const UserSchema = mongoose.Schema({
   approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   approvalDate: Date,
   
+  // Suspension Fields
+  isSuspended: { type: Boolean, default: false },
+  suspensionReason: String,
+  suspensionStartDate: Date,
+  suspensionEndDate: Date,
+  suspendedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  
+  // Blocking Fields
+  isBlocked: { type: Boolean, default: false },
+  blockReason: String,
+  blockedAt: Date,
+  blockedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  
   createdAt: { type: Date, default: Date.now },
 });
 
