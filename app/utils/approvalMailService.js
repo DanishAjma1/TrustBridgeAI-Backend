@@ -5,13 +5,16 @@ import nodemailer from "nodemailer";
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
+  pool: true, 
+  maxConnections: 5,
+  maxMessages: 100,
   auth: {
     user: process.env.USER_EMAIL,
     pass: process.env.USER_PASSWORD,
   },
 });
 
-const LOGO_URL = process.env.LOGO_URL || "https://yourdomain.com/logo.png";
+const LOGO_URL = process.env.LOGO_URL || "https://mzain4321.github.io/TrustBridge-logo/TrustBridge-logo.png";
 
 // Helper function to generate protected logo HTML with white background
 const getProtectedLogoHTML = (size = "large") => {
