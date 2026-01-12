@@ -12,6 +12,7 @@ import { logRiskEvent } from "../routes/adminRouter.js";
 import TwoFactorAuth from "./twoFactorAuth.js";
 import Entrepreneur from "../models/enterpreneur.js";
 import Investor from "../models/investor.js";
+import Notification from "../models/notification.js";
 const authRouter = Router();
 
 let failed_attempts = 0;
@@ -109,6 +110,19 @@ authRouter.post("/register", async (req, res) => {
     try {
       await sendAdminNewUserNotification(user.email, user.name, user.role);
       await sendUserRegistrationNotification(user.email, user.name, user.role);
+      
+      // Create in-app notification for all admins
+      const admins = await User.find({ role: 'admin' });
+      const notificationPromises = admins.map(admin => {
+        return new Notification({
+          recipient: admin._id,
+          sender: user._id,
+          message: `New ${user.role} registration: ${user.name} (${user.email})`,
+          type: 'registration',
+          link: `/admin/approvals`
+        }).save();
+      });
+      await Promise.all(notificationPromises);
     } catch (mailErr) {
       console.error("Failed to send admin new-user notification:", mailErr);
     }

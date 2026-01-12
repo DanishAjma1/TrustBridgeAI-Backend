@@ -10,6 +10,7 @@ import fs from "fs";
 import User from "../models/user.js";
 import RejectionHistory from "../models/rejectionHistory.js";
 import RiskEvent from "../models/riskEvent.js";
+import Notification from "../models/notification.js";
 import {
   sendApprovalMail,
   sendRejectionMail,
@@ -847,12 +848,40 @@ adminRouter.post("/suspend-user/:userId", async (req, res) => {
       suspensionEndDate.getDate() + parseInt(suspensionDays)
     );
 
+    // Increment suspension count
+    const currentCount = (user.suspensionCount || 0) + 1;
+    
+    if (currentCount >= 4) {
+      // 4th time: Permanent Block
+      user.isBlocked = true;
+      user.blockReason = `Permanent block due to exceeding maximum suspension limit (4th violation). Original reason: ${reason}`;
+      user.blockedAt = new Date();
+      user.blockedBy = adminId;
+      user.isSuspended = false; // It's a block now
+      user.suspensionCount = currentCount;
+      await user.save();
+      await sendBlockMail(user.email, user.name, user.blockReason);
+      
+      return res.status(200).json({
+        message: "User permanently blocked due to multiple violations (4th strike)",
+        user: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          isBlocked: true,
+          blockReason: user.blockReason,
+        },
+      });
+    }
+
     user.isSuspended = true;
     user.suspensionReason = reason;
     user.suspensionStartDate = new Date();
     user.suspensionEndDate = suspensionEndDate;
     user.suspendedBy = adminId;
+    user.suspensionCount = currentCount;
     await user.save();
+    
     await sendSuspensionMail(user.email, user.name, reason, suspensionDays);
     res.status(200).json({
       message: "User suspended successfully",
@@ -1084,6 +1113,57 @@ adminRouter.delete("/delete-user/:userId", async (req, res) => {
     res
       .status(500)
       .json({ message: "Failed to delete user", error: error.message });
+  }
+});
+
+// =====================
+//  NOTIFICATIONS
+// =====================
+
+adminRouter.get("/notifications/:adminId", async (req, res) => {
+  try {
+    await connectDB();
+    const { adminId } = req.params;
+    const notifications = await Notification.find({ recipient: adminId })
+      .sort({ createdAt: -1 })
+      .populate("sender", "name email role")
+      .limit(50);
+    res.status(200).json(notifications);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch notifications", error: error.message });
+  }
+});
+
+adminRouter.put("/notifications/:id/read", async (req, res) => {
+  try {
+    await connectDB();
+    const { id } = req.params;
+    await Notification.findByIdAndUpdate(id, { isRead: true });
+    res.status(200).json({ message: "Notification marked as read" });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to update notification", error: error.message });
+  }
+});
+
+adminRouter.put("/notifications/read-all/:adminId", async (req, res) => {
+  try {
+    await connectDB();
+    const { adminId } = req.params;
+    await Notification.updateMany({ recipient: adminId, isRead: false }, { isRead: true });
+    res.status(200).json({ message: "All notifications marked as read" });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to update notifications", error: error.message });
+  }
+});
+
+adminRouter.delete("/notifications/:adminId", async (req, res) => {
+  try {
+    await connectDB();
+    const { adminId } = req.params;
+    await Notification.deleteMany({ recipient: adminId });
+    res.status(200).json({ message: "Notifications deleted" });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to delete notifications", error: error.message });
   }
 });
 
