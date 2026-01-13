@@ -21,6 +21,7 @@ import {
   sendUnblockMail,
   sendUnsuspendMail,
 } from "../utils/suspensionBlockMailService.js";
+import { checkApprovalStatus, adminOnly } from "../middleware/approvalMiddleware.js";
 import jwt from "jsonwebtoken";
 const uploadDir = "uploads";
 
@@ -585,6 +586,22 @@ adminRouter.post("/approve-user/:userId", async (req, res) => {
       // Don't fail the approval if email fails, just log it
     }
 
+    // Create welcome notification for the newly approved user
+    try {
+      const welcomeMessage = `Welcome to TrustBridge AI! 🎉 Your ${user.role} account has been approved. You can now access all platform features and start connecting with ${user.role === 'entrepreneur' ? 'investors' : 'startups'}. We're excited to have you on board!`;
+      
+      await Notification.create({
+        recipient: user._id,
+        sender: adminId, // Admin who approved the user
+        message: welcomeMessage,
+        type: "approval",
+        isRead: false,
+      });
+    } catch (notificationError) {
+      console.error("Welcome notification creation error:", notificationError);
+      // Don't fail the approval if notification creation fails
+    }
+
     res.status(200).json({
       message: `${user.role} account approved successfully`,
       user: {
@@ -1120,10 +1137,16 @@ adminRouter.delete("/delete-user/:userId", async (req, res) => {
 //  NOTIFICATIONS
 // =====================
 
-adminRouter.get("/notifications/:adminId", async (req, res) => {
+adminRouter.get("/notifications/:adminId", checkApprovalStatus, async (req, res) => {
   try {
-    await connectDB();
     const { adminId } = req.params;
+
+    // Security: Only allow users to fetch their own notifications, unless they are admin
+    if (req.user.role !== "admin" && req.user._id.toString() !== adminId) {
+      return res.status(403).json({ message: "Access denied. You can only view your own notifications." });
+    }
+
+    await connectDB();
     const notifications = await Notification.find({ recipient: adminId })
       .sort({ createdAt: -1 })
       .populate("sender", "name email role")
@@ -1134,21 +1157,37 @@ adminRouter.get("/notifications/:adminId", async (req, res) => {
   }
 });
 
-adminRouter.put("/notifications/:id/read", async (req, res) => {
+adminRouter.put("/notifications/:id/read", checkApprovalStatus, async (req, res) => {
   try {
     await connectDB();
     const { id } = req.params;
-    await Notification.findByIdAndUpdate(id, { isRead: true });
+    
+    // Security check: ensure notification belongs to user
+    const notification = await Notification.findById(id);
+    if (!notification) return res.status(404).json({ message: "Notification not found" });
+    
+    if (req.user.role !== "admin" && notification.recipient.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Access denied." });
+    }
+
+    notification.isRead = true;
+    await notification.save();
     res.status(200).json({ message: "Notification marked as read" });
   } catch (error) {
     res.status(500).json({ message: "Failed to update notification", error: error.message });
   }
 });
 
-adminRouter.put("/notifications/read-all/:adminId", async (req, res) => {
+adminRouter.put("/notifications/read-all/:adminId", checkApprovalStatus, async (req, res) => {
   try {
-    await connectDB();
     const { adminId } = req.params;
+    
+    // Security check
+    if (req.user.role !== "admin" && req.user._id.toString() !== adminId) {
+      return res.status(403).json({ message: "Access denied." });
+    }
+
+    await connectDB();
     await Notification.updateMany({ recipient: adminId, isRead: false }, { isRead: true });
     res.status(200).json({ message: "All notifications marked as read" });
   } catch (error) {
@@ -1156,14 +1195,69 @@ adminRouter.put("/notifications/read-all/:adminId", async (req, res) => {
   }
 });
 
-adminRouter.delete("/notifications/:adminId", async (req, res) => {
+adminRouter.delete("/notifications/:adminId", checkApprovalStatus, async (req, res) => {
   try {
-    await connectDB();
     const { adminId } = req.params;
+
+    // Security check
+    if (req.user.role !== "admin" && req.user._id.toString() !== adminId) {
+      return res.status(403).json({ message: "Access denied." });
+    }
+
+    await connectDB();
     await Notification.deleteMany({ recipient: adminId });
     res.status(200).json({ message: "Notifications deleted" });
   } catch (error) {
     res.status(500).json({ message: "Failed to delete notifications", error: error.message });
+  }
+});
+
+adminRouter.post("/send-mass-notification", adminOnly, async (req, res) => {
+  try {
+    const { target, message, userId, senderId } = req.body;
+    await connectDB();
+
+    let query = {
+      approvalStatus: "approved",
+      isBlocked: false,
+    };
+
+    if (target === "investors") {
+      query.role = "investor";
+    } else if (target === "entrepreneurs") {
+      query.role = "entrepreneur";
+    } else if (target === "specific") {
+      if (!userId) {
+        return res.status(400).json({ message: "User ID is required for specific target" });
+      }
+      query._id = userId;
+    } else if (target === "all") {
+      // Includes both investors and entrepreneurs (already handled by default query)
+      query.$or = [{ role: "investor" }, { role: "entrepreneur" }];
+    }
+
+    const users = await User.find(query);
+
+    if (users.length === 0) {
+      return res.status(404).json({ message: "No eligible users found for this target" });
+    }
+
+    const notifications = users.map((u) => ({
+      recipient: u._id,
+      sender: senderId,
+      message: message,
+      type: "general",
+    }));
+
+    await Notification.insertMany(notifications);
+
+    res.status(200).json({
+      message: `Notification sent successfully to ${notifications.length} user(s)`,
+      count: notifications.length
+    });
+  } catch (error) {
+    console.error("Error sending mass notification:", error);
+    res.status(500).json({ message: "Failed to send notification", error: error.message });
   }
 });
 
