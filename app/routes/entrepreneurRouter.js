@@ -12,6 +12,8 @@ enterpreneurRouter.get("/get-entrepreneurs", async (req, res) => {
       {
         $match: {
           role: "entrepreneur",
+          approvalStatus: "approved",
+          isBlocked: { $ne: true },
         },
       },
       {
@@ -76,6 +78,8 @@ enterpreneurRouter.get("/get-entrepreneur-by-id/:id", async (req, res) => {
         $match: {
           _id: new mongoose.Types.ObjectId(id),
           role: "entrepreneur",
+          approvalStatus: "approved",
+          isBlocked: { $ne: true },
         },
       },
       {

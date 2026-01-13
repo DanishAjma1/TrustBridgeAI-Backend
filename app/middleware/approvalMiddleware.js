@@ -21,6 +21,9 @@ export const checkApprovalStatus = async (req, res, next) => {
       return res.status(404).json({ message: "User not found" });
     }
 
+    // Store user info in request
+    req.user = user;
+
     // Admin can always proceed
     if (user.role === "admin") {
       return next();
@@ -78,7 +81,8 @@ export const adminOnly = async (req, res, next) => {
       return res.status(403).json({ message: "Only admin can access this resource" });
     }
 
-    // Store admin info in request
+    // Store admin/user info in request
+    req.user = user;
     req.admin = user;
     next();
   } catch (error) {

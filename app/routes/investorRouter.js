@@ -12,6 +12,8 @@ investorRouter.get("/get-investors", async (req, res) => {
       {
         $match: {
           role: "investor",
+          approvalStatus: "approved",
+          isBlocked: { $ne: true },
         },
       },
       {
@@ -41,9 +43,9 @@ investorRouter.get("/get-investors", async (req, res) => {
         },
       },
       {
-        $addFields:{
-          userId:"$_id"
-        }
+        $addFields: {
+          userId: "$_id",
+        },
       },
       {
         $replaceRoot: {
@@ -74,6 +76,8 @@ investorRouter.get("/get-investor-by-id/:id", async (req, res) => {
         $match: {
           _id: new mongoose.Types.ObjectId(id),
           role: "investor",
+          approvalStatus: "approved",
+          isBlocked: { $ne: true },
         },
       },
       {
@@ -98,7 +102,7 @@ investorRouter.get("/get-investor-by-id/:id", async (req, res) => {
       {
         $project: {
           password: 0,
-          __v:0,
+          __v: 0,
           investorInfo: 0,
         },
       },
@@ -136,7 +140,7 @@ investorRouter.put("/update-profile/:id", async (req, res) => {
       }
     }
 
-    res.status(200).json({message:"Data updated successfully."});
+    res.status(200).json({ message: "Data updated successfully." });
   } catch (err) {
     res.status(400).json(err.message);
   }
