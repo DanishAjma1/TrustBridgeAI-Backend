@@ -103,7 +103,7 @@ adminRouter.delete("/user/:id", async (req, res) => {
   }
 });
 
-adminRouter.post("/campaigns", upload.array("images", 5), async (req, res) => {
+adminRouter.post("/campaigns", upload.fields([{ name: "images", maxCount: 3 }, { name: "video", maxCount: 1 }]), async (req, res) => {
   try {
     await connectDB();
     res.status(200).send("Campaign route OK");
@@ -117,7 +117,15 @@ adminRouter.post("/campaigns", upload.array("images", 5), async (req, res) => {
     }
 
     const imagePaths =
-      req.files?.map((file) => `/uploads/${file.filename}`) || [];
+      req.files["images"]?.map((file) => `/uploads/${file.filename}`) || [];
+    
+    const videoPath = req.files["video"]?.[0]
+      ? `/uploads/${req.files["video"][0].filename}`
+      : null;
+
+    if (imagePaths.length === 0) {
+      return res.status(400).json({ message: "At least one image is required." });
+    }
 
     const newCampaign = new Campaign({
       createdBy: null,
@@ -127,7 +135,9 @@ adminRouter.post("/campaigns", upload.array("images", 5), async (req, res) => {
       startDate,
       endDate,
       category,
+      category,
       images: imagePaths,
+      video: videoPath,
       status: "active",
     });
 
@@ -153,6 +163,79 @@ adminRouter.get("/campaigns", async (req, res) => {
   } catch (error) {
     console.error("FAILED TO FETCH CAMPAIGNS:", error.message);
     res.status(500).json({ message: error.message });
+  }
+});
+
+adminRouter.delete("/campaigns/:id", async (req, res) => {
+  try {
+    await connectDB();
+    const { id } = req.params;
+    await Campaign.findByIdAndDelete(id);
+    res.status(200).json({ message: "Campaign deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to delete campaign", error });
+  }
+});
+
+adminRouter.put("/campaigns/:id", upload.fields([{ name: "images", maxCount: 3 }, { name: "video", maxCount: 1 }]), async (req, res) => {
+  try {
+    await connectDB();
+    const { id } = req.params;
+    const { title, description, goalAmount, startDate, endDate, category, existingImages, removeVideo } = req.body;
+
+    const currentCampaign = await Campaign.findById(id);
+    if (!currentCampaign) {
+      return res.status(404).json({ message: "Campaign not found" });
+    }
+
+    // Handle Images
+    // existingImages might be a single string or array, or undefined
+    let keptImages = [];
+    if (existingImages) {
+      keptImages = Array.isArray(existingImages) ? existingImages : [existingImages];
+    }
+    
+    // Parse keptImages to ensure they are relative paths if needed, 
+    // but usually they come back as full URLs from frontend if we aren't careful.
+    // Assuming frontend sends the path stored in DB (e.g. "/uploads/file.png"). 
+    // If frontend sends full URL, we might need to strip domain? 
+    // Let's rely on frontend sending back what it received or handling it there. 
+    // Actually, the DB stores `/uploads/filename`. If frontend sends that back, we are good.
+
+    const newImagePaths = req.files["images"]?.map((file) => `/uploads/${file.filename}`) || [];
+    const finalImages = [...keptImages, ...newImagePaths];
+
+    if (finalImages.length === 0) {
+      return res.status(400).json({ message: "At least one image is required." });
+    }
+
+    // Handle Video
+    let videoPath = currentCampaign.video;
+    if (req.files["video"]?.[0]) {
+      videoPath = `/uploads/${req.files["video"][0].filename}`;
+    } else if (removeVideo === "true") {
+      videoPath = null;
+    }
+
+    const updatedCampaign = await Campaign.findByIdAndUpdate(
+      id,
+      {
+        title,
+        description,
+        goalAmount,
+        startDate,
+        endDate,
+        category,
+        images: finalImages,
+        video: videoPath,
+      },
+      { new: true }
+    );
+
+    res.status(200).json({ message: "Campaign updated successfully", campaign: updatedCampaign });
+  } catch (error) {
+    console.error("UPDATE CAMPAIGN ERROR:", error);
+    res.status(500).json({ message: "Failed to update campaign", error: error.message });
   }
 });
 
