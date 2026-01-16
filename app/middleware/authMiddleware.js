@@ -119,7 +119,7 @@ authRouter.post("/register", async (req, res) => {
           sender: user._id,
           message: `New ${user.role} registration: ${user.name} (${user.email})`,
           type: 'registration',
-          link: `/admin/approvals`
+          link: `/dashboard/admin/approvals`
         }).save();
       });
       await Promise.all(notificationPromises);
