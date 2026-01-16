@@ -62,6 +62,16 @@ const campaignSchema = new mongoose.Schema(
         supporterId: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "User",
+          required: false,
+        },
+        guestId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Supporter",
+          required: false,
+        },
+        isGuest: {
+          type: Boolean,
+          default: false,
         },
         amount: Number,
         date: {

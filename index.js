@@ -1,5 +1,4 @@
-import dotenv from "dotenv";
-dotenv.config();
+import "./loadEnv.js";
 import express from "express";
 import cors from "cors";
 import { createServer } from "http";
@@ -18,6 +17,7 @@ import googleRouter from "./app/routes/googleOauthRouter.js";
 import linkedinRouter from "./app/routes/linkedInoAuthRouter.js";
 import adminRouter from "./app/routes/adminRouter.js";
 import contactRouter from "./app/routes/contact.js";
+import paymentRouter from "./app/routes/paymentRouter.js";
 import { startSuspensionChecker } from "./app/utils/suspensionChecker.js";
 const app = express();
 const server = createServer(app);
@@ -46,6 +46,7 @@ app.use("/investor", investorRouter);
 app.use("/agora", agoraRouter);
 app.use("/admin", adminRouter);
 app.use("/contact", contactRouter);
+app.use("/payment", paymentRouter);
 
 startSuspensionChecker();
 
