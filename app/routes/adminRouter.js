@@ -318,6 +318,7 @@ adminRouter.get("/users/users-last-year", async (req, res) => {
     const users = await User.aggregate([
       {
         $match: {
+          approvalStatus: "approved",
           createdAt: {
             $gte: moment().subtract(12, "months").toDate(),
           },
@@ -371,6 +372,11 @@ adminRouter.get("/users/startup-by-industry", async (req, res) => {
   try {
     await connectDB();
     const users = await Enterprenuer.aggregate([
+      {
+        $match: {
+          approvalStatus: "approved",
+        },
+      },
       {
         $group: {
           _id: "$industry",

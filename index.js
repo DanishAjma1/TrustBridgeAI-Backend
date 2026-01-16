@@ -19,6 +19,7 @@ import adminRouter from "./app/routes/adminRouter.js";
 import contactRouter from "./app/routes/contact.js";
 import paymentRouter from "./app/routes/paymentRouter.js";
 import { startSuspensionChecker } from "./app/utils/suspensionChecker.js";
+import { startCampaignChecker } from "./app/utils/campaignChecker.js";
 const app = express();
 const server = createServer(app);
 
@@ -49,6 +50,7 @@ app.use("/contact", contactRouter);
 app.use("/payment", paymentRouter);
 
 startSuspensionChecker();
+startCampaignChecker();
 
 server.listen(5000, () => {
   console.log("server is listening on port 5000");

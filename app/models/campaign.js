@@ -36,7 +36,11 @@ const campaignSchema = new mongoose.Schema(
     },
     endDate: {
       type: Date,
-      required: true,
+      required: false,
+    },
+    isLifetime: {
+        type: Boolean,
+        default: false,
     },
     category: {
       type: String,
