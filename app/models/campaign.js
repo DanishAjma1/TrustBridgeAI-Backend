@@ -17,6 +17,10 @@ const campaignSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    organizer: {
+      type: String,
+      required: false,
+    },
     goalAmount: {
       type: Number,
       required: true,
