@@ -17,6 +17,10 @@ const campaignSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    organizer: {
+      type: String,
+      required: false,
+    },
     goalAmount: {
       type: Number,
       required: true,
@@ -49,6 +53,10 @@ const campaignSchema = new mongoose.Schema(
         type: String, // stores uploaded file paths
       },
     ],
+    video: {
+      type: String, // stores uploaded video path
+      required: false,
+    },
     supporters: [
       {
         supporterId: {
