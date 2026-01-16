@@ -13,7 +13,7 @@ export const checkExpiredCampaigns = async () => {
     // Find active campaigns that are NOT lifetime and have passed their end date
     const expiredCampaigns = await Campaign.find({
       status: "active",
-      isLifetime: false,
+      isLifetime: { $ne: true },
       endDate: { $lte: now }
     });
 
