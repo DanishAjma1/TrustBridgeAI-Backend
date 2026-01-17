@@ -106,10 +106,10 @@ adminRouter.delete("/user/:id", async (req, res) => {
 adminRouter.post("/campaigns", upload.fields([{ name: "images", maxCount: 3 }, { name: "video", maxCount: 1 }]), async (req, res) => {
   try {
     await connectDB();
-    const { title, description, goalAmount, startDate, endDate, category, organizer } =
+    const { title, description, goalAmount, startDate, endDate, category, organizer, isLifetime } =
       req.body;
 
-    if (!title || !description || !goalAmount || !startDate || !endDate) {
+    if (!title || !description || !goalAmount || !startDate || (!isLifetime && !endDate)) {
       return res
         .status(400)
         .json({ message: "All required fields must be provided." });
@@ -132,7 +132,8 @@ adminRouter.post("/campaigns", upload.fields([{ name: "images", maxCount: 3 }, {
       description,
       goalAmount,
       startDate,
-      endDate,
+      endDate: isLifetime ? null : endDate,
+      isLifetime: isLifetime || false,
       category,
       organizer,
       images: imagePaths,
@@ -318,6 +319,7 @@ adminRouter.get("/users/users-last-year", async (req, res) => {
     const users = await User.aggregate([
       {
         $match: {
+          approvalStatus: "approved",
           createdAt: {
             $gte: moment().subtract(12, "months").toDate(),
           },
@@ -371,6 +373,11 @@ adminRouter.get("/users/startup-by-industry", async (req, res) => {
   try {
     await connectDB();
     const users = await Enterprenuer.aggregate([
+      {
+        $match: {
+          approvalStatus: "approved",
+        },
+      },
       {
         $group: {
           _id: "$industry",

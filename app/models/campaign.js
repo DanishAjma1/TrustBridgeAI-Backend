@@ -36,7 +36,11 @@ const campaignSchema = new mongoose.Schema(
     },
     endDate: {
       type: Date,
-      required: true,
+      required: false,
+    },
+    isLifetime: {
+        type: Boolean,
+        default: false,
     },
     category: {
       type: String,
@@ -62,6 +66,16 @@ const campaignSchema = new mongoose.Schema(
         supporterId: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "User",
+          required: false,
+        },
+        guestId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Supporter",
+          required: false,
+        },
+        isGuest: {
+          type: Boolean,
+          default: false,
         },
         amount: Number,
         date: {

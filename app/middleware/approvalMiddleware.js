@@ -54,7 +54,10 @@ export const checkApprovalStatus = async (req, res, next) => {
     next();
   } catch (error) {
     console.error("Approval check error:", error);
-    return res.status(401).json({ message: "Token validation failed" });
+    return res.status(401).json({ 
+      message: "Token validation failed",
+      error: error.message 
+    });
   }
 };
 
@@ -87,6 +90,9 @@ export const adminOnly = async (req, res, next) => {
     next();
   } catch (error) {
     console.error("Admin check error:", error);
-    return res.status(401).json({ message: "Token validation failed" });
+    return res.status(401).json({ 
+      message: "Token validation failed",
+      error: error.message 
+    });
   }
 };

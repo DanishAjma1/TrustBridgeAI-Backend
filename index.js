@@ -1,5 +1,4 @@
-import dotenv from "dotenv";
-dotenv.config();
+import "./loadEnv.js";
 import express from "express";
 import cors from "cors";
 import { createServer } from "http";
@@ -18,13 +17,18 @@ import googleRouter from "./app/routes/googleOauthRouter.js";
 import linkedinRouter from "./app/routes/linkedInoAuthRouter.js";
 import adminRouter from "./app/routes/adminRouter.js";
 import contactRouter from "./app/routes/contact.js";
+import paymentRouter from "./app/routes/paymentRouter.js";
 import { startSuspensionChecker } from "./app/utils/suspensionChecker.js";
+import { startCampaignChecker } from "./app/utils/campaignChecker.js";
+import stripeWebhook from "./app/routes/stripeWebhook.js";
 const app = express();
 const server = createServer(app);
 
 // SocketListeners(server);
 
 app.use(cookieParser());
+// Mount webhook BEFORE bodyParser because it needs raw body for signature verification
+app.use("/webhook", stripeWebhook);
 app.use(bodyParser.json());
 app.use(
   cors({
@@ -46,8 +50,10 @@ app.use("/investor", investorRouter);
 app.use("/agora", agoraRouter);
 app.use("/admin", adminRouter);
 app.use("/contact", contactRouter);
+app.use("/payment", paymentRouter);
 
 startSuspensionChecker();
+startCampaignChecker();
 
 server.listen(5000, () => {
   console.log("server is listening on port 5000");
