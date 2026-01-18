@@ -1,14 +1,15 @@
 import mongoose from "mongoose";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import User from "./models/user.js"; // adjust path
 import Investor from "./models/investor.js";
 import Enterprenuer from "./models/enterpreneur.js";
 
-const MONGO_URI = "mongodb://localhost:27017/TrustBridge"; // change db name
+const MONGO_URI = "mongodb://localhost:27017/fullstackNexus"; // change db name
 
 async function createDummyUsers() {
   try {
     await mongoose.connect(MONGO_URI);
+    console.log("Connected to MongoDB");
 
     const hashedPassword = await bcrypt.hash("123", 10);
 
@@ -18,13 +19,13 @@ async function createDummyUsers() {
       email: "in@gmail.com",
       password: hashedPassword,
       role: "investor",
-      approvalStatus: "approved"
+      approvalStatus: "approved",
     });
 
     await Investor.create({
       userId: investorUser._id,
       totalInvestments: 0,
-      approvalStatus: "approved"
+      approvalStatus: "approved",
     });
 
     // Entrepreneur User
@@ -33,14 +34,14 @@ async function createDummyUsers() {
       email: "en@gmail.com",
       password: hashedPassword,
       role: "entrepreneur",
-      approvalStatus: "approved"
+      approvalStatus: "approved",
     });
 
     await Enterprenuer.create({
       userId: entrepreneurUser._id,
       startupName: "Demo Startup",
       fundingNeeded: 50000,
-      approvalStatus: "approved"
+      approvalStatus: "approved",
     });
 
     console.log("Dummy Investor & Entrepreneur created successfully!");

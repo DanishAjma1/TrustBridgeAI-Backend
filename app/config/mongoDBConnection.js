@@ -1,6 +1,14 @@
+// ...existing code...
 import mongoose from "mongoose";
-import { configDotenv } from "dotenv";
-configDotenv();
+import path from "path";
+import dotenv from "dotenv";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// load .env from project root (three levels up from this file)
+dotenv.config({ path: path.resolve(__dirname, "../../..", ".env") });
 
 export const connectDB = async() => {
   try {
@@ -15,3 +23,4 @@ export const connectDB = async() => {
     process.exit(1);
   }
 };
+// ...existing code...
